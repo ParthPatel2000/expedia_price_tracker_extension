@@ -1,10 +1,10 @@
-// Function to format timestamp into a readable string
+// Format timestamp into a readable string
 function formatDate(dateStr) {
   let d = new Date(dateStr);
   return d.toLocaleString();
 }
 
-// Function to render the hotel prices on the popup
+// Render hotel prices on the popup
 function renderPrices(prices) {
   const tbody = document.getElementById('pricesBody');
   tbody.innerHTML = ''; // clear previous
@@ -14,7 +14,6 @@ function renderPrices(prices) {
     return;
   }
 
-  // Loop through the prices and render them
   for (const [hotel, data] of Object.entries(prices)) {
     const tr = document.createElement('tr');
 
@@ -35,36 +34,137 @@ function renderPrices(prices) {
   }
 }
 
-// Function to load the prices from chrome storage
+// Load prices from chrome storage
 function loadPrices() {
   chrome.storage.local.get('prices', (result) => {
     renderPrices(result.prices || {});
   });
 }
 
-// Add event listener for the refresh button
-document.getElementById('refreshBtn').addEventListener('click', () => {
-  // Trigger scraping (same function your background uses)
-  chrome.runtime.sendMessage({ action: 'startScraping' });
-  // You can show a quick message or spinner here if you want
-  document.getElementById('refreshBtn').disabled = true;
-  setTimeout(() => {
-    document.getElementById('refreshBtn').disabled = false;
-  }, 3000); // Disable for 3 seconds to prevent multiple clicks
-});
+// Toggle views
+function showPricesView() {
+  document.getElementById('pricesView').style.display = 'block';
+  document.getElementById('settingsView').style.display = 'none';
+  loadPrices();
+}
 
-// Load prices when popup opens
-window.onload = loadPrices;
+function showSettingsView() {
+  document.getElementById('pricesView').style.display = 'none';
+  document.getElementById('settingsView').style.display = 'block';
+  loadSettings();
+  clearStatusMsg();
+}
 
-// Add event listener for the background tab switch
+// Load background tab toggle state
+function loadBackgroundTabSetting() {
+  chrome.storage.local.get({ backgroundTabs: true }, (result) => {
+    document.getElementById('backgroundTabSwitch').checked = result.backgroundTabs;
+  });
+}
+
+// Save background tab toggle state
 document.getElementById('backgroundTabSwitch').addEventListener('change', function () {
   const isChecked = this.checked;
-
-  // Save the state of the switch to chrome storage
   chrome.storage.local.set({ backgroundTabs: isChecked });
 });
 
-// Load the background tab setting on page load
-chrome.storage.local.get({ backgroundTabs: true }, (result) => {
-  document.getElementById('backgroundTabSwitch').checked = result.backgroundTabs;
+// adding the current page to the storage.
+function addCurrentExpediaLink() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const currentTab = tabs[0];
+    const url = currentTab.url;
+
+    if (!url.includes("expedia.com/Hotel-Search")) {
+      console.warn("❌ Not an Expedia Hotel Search URL");
+      return;
+    }
+
+    const hotelNameParam = new URL(url).searchParams.get("hotelName");
+    const displayName = hotelNameParam ? decodeURIComponent(hotelNameParam.replace(/\+/g, ' ')) : 'Unnamed Hotel';
+
+    chrome.storage.local.get({ propertyLinks: [] }, (result) => {
+      const existing = result.propertyLinks || [];
+
+      // Avoid duplicates by checking URL
+      const alreadyExists = existing.some(p => p.url === url);
+      if (alreadyExists) {
+        console.log("⚠️ Property already saved.");
+        return;
+      }
+
+      const newEntry = {
+        name: displayName,
+        url: url
+      };
+
+      const updated = [...existing, newEntry];
+
+      chrome.storage.local.set({ propertyLinks: updated }, () => {
+        console.log(`✅ Saved: ${displayName}`);
+      });
+    });
+  });
+}
+
+
+// Event listeners for buttons
+document.getElementById('settingsBtn').addEventListener('click', showSettingsView);
+document.getElementById('backBtn').addEventListener('click', showPricesView);
+document.getElementById('add-link').addEventListener('click', addCurrentExpediaLink);
+
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'startScraping' });
+  document.getElementById('refreshBtn').disabled = true;
+  setTimeout(() => {
+    document.getElementById('refreshBtn').disabled = false;
+  }, 3000);
 });
+
+
+// Save Google Sheets URL to storage
+document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+  const url = document.getElementById('sheetUrlInput').value.trim();
+  clearStatusMsg();
+
+  if (!url) {
+    showStatusMsg('Please enter a URL.', true);
+    return;
+  }
+
+  // Basic validation for Google Sheets URL
+  if (!url.includes('docs.google.com/spreadsheets')) {
+    showStatusMsg('Invalid Google Sheets URL.', true);
+    return;
+  }
+
+  chrome.storage.local.set({ googleSheetUrl: url }, () => {
+    showStatusMsg('Google Sheets URL saved successfully!');
+  });
+});
+
+// Load Google Sheets URL from storage into input
+function loadSettings() {
+  chrome.storage.local.get('googleSheetUrl', (result) => {
+    document.getElementById('sheetUrlInput').value = result.googleSheetUrl || '';
+  });
+}
+
+// Status message helper functions
+function showStatusMsg(msg, isError = false) {
+  const status = document.getElementById('statusMsg');
+  status.textContent = msg;
+  status.className = isError ? 'error' : '';
+}
+
+function clearStatusMsg() {
+  const status = document.getElementById('statusMsg');
+  status.textContent = '';
+  status.className = '';
+}
+
+// Load initial UI state on popup open
+window.onload = () => {
+  showPricesView();
+  loadBackgroundTabSetting();
+};

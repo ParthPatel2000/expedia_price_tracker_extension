@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>Expedia Prices</title>
   <style>
     body { font-family: Arial, sans-serif; width: 320px; padding: 10px; }
@@ -44,26 +45,66 @@
     input:checked + .slider:before {
       transform: translateX(14px);
     }
+
+    /* Settings button small style */
+    #settingsBtn {
+      font-size: 12px;
+      padding: 4px 8px;
+      margin-top: 6px;
+      cursor: pointer;
+      float: right;
+      background-color: #eee;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+
+    /* Hide sections by default */
+    #settingsView { display: none; }
+    #statusMsg {
+      margin-top: 8px;
+      font-size: 12px;
+      color: green;
+    }
+    #statusMsg.error {
+      color: red;
+    }
   </style>
 </head>
 <body>
-  <table>
-    <caption>Hotel Prices</caption>
-    <thead>
-      <tr><th>Hotel</th><th>Price</th><th>Last Updated</th></tr>
-    </thead>
-    <tbody id="pricesBody">
-      <tr><td colspan="3">Loading...</td></tr>
-    </tbody>
-  </table>
 
-  <label class="switch">
-    <input type="checkbox" id="backgroundTabSwitch">
-    <span class="slider"></span>
-  </label>
-  <span> Open tabs in background</span>
+  <!-- Prices View -->
+  <div id="pricesView">
+    <table>
+      <caption>Hotel Prices
+        <button id="settingsBtn" title="Settings">⚙️ Settings</button>
+      </caption>
+      <thead>
+        <tr><th>Hotel</th><th>Price</th><th>Last Updated</th></tr>
+      </thead>
+      <tbody id="pricesBody">
+        <tr><td colspan="3">Loading...</td></tr>
+      </tbody>
+    </table>
 
-  <button id="refreshBtn">Refresh Prices</button>
+    <label class="switch">
+      <input type="checkbox" id="backgroundTabSwitch">
+      <span class="slider"></span>
+    </label>
+    <span> Open tabs in background</span>
+
+    <button id="refreshBtn">Refresh Prices</button>
+  </div>
+
+  <!-- Settings View -->
+  <div id="settingsView">
+    <h3>Settings</h3>
+    <label for="sheetUrlInput">Google Sheets URL:</label><br>
+    <input type="text" id="sheetUrlInput" placeholder="Enter your Google Sheets URL" style="width: 100%; margin-top: 4px;"><br>
+    <button id="saveSettingsBtn" style="margin-top: 8px;">Save</button>
+    <button id="add-link">➕ Add This Property</button>
+    <button id="backBtn" style="margin-left: 8px;">Back</button>
+    <div id="statusMsg"></div>
+  </div>
 
   <script src="popup.js"></script>
 </body>

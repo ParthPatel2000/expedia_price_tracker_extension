@@ -54,7 +54,6 @@ function showPricesView() {
 function showSettingsView() {
   document.getElementById('pricesView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'block';
-  loadSettings();
   clearStatusMsg();
 }
 
@@ -143,43 +142,6 @@ document.getElementById('syncFirestoreBtn').addEventListener('click', () => {
 document.getElementById('downloadFromCloudBtn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'downloadPropertyLinks' });
 });
-
-
-
-
-
-// Save Google Sheets URL to storage
-document.getElementById('saveSettingsBtn').addEventListener('click', () => {
-  const url = document.getElementById('sheetUrlInput').value.trim();
-  clearStatusMsg();
-
-  if (!url) {
-    showStatusMsg('Please enter a URL.', true);
-    return;
-  }
-
-  // Basic validation for Google Sheets URL
-  if (!url.includes('docs.google.com/spreadsheets')) {
-    showStatusMsg('Invalid Google Sheets URL.', true);
-    return;
-  }
-  
-  const match = url.match(/\/d\/([a-zA-Z0-9-_]+)\//);
-  const sheetId = match ? match[1] : null;
-
-  chrome.storage.local.set({sheetId:sheetId});
-
-  chrome.storage.local.set({ googleSheetUrl: url }, () => {
-    showStatusMsg('Google Sheets URL saved successfully!');
-  });
-});
-
-// Load Google Sheets URL from storage into input
-function loadSettings() {
-  chrome.storage.local.get('googleSheetUrl', (result) => {
-    document.getElementById('sheetUrlInput').value = result.googleSheetUrl || '';
-  });
-}
 
 // Status message helper functions
 function showStatusMsg(msg, isError = false) {

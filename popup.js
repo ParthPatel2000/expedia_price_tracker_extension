@@ -1,3 +1,6 @@
+// popup.js
+
+
 // Format timestamp into a readable string
 function formatDate(dateStr) {
   let d = new Date(dateStr);
@@ -102,6 +105,9 @@ function addCurrentExpediaLink() {
       chrome.storage.local.set({ propertyLinks: updated }, () => {
         console.log(`✅ Saved: ${displayName}`);
       });
+
+      // Notify background script to sync links to Firestore
+      chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
     });
   });
 }
@@ -121,6 +127,26 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   }, 3000);
 });
 
+// Google OAuth login button
+document.getElementById('googleLoginBtn').addEventListener('click', () => {
+  // Send message to background script to start OAuth flow
+  chrome.runtime.sendMessage({ action: 'startGoogleOAuth' });
+  document.getElementById('userInfo').textContent = 'Opening Google sign-in...';
+});
+
+// Sync Firestore with property links button
+document.getElementById('syncFirestoreBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
+});
+
+// download property links from Firestore button
+document.getElementById('downloadFromCloudBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'downloadPropertyLinks' });
+});
+
+
+
+
 
 // Save Google Sheets URL to storage
 document.getElementById('saveSettingsBtn').addEventListener('click', () => {
@@ -137,6 +163,11 @@ document.getElementById('saveSettingsBtn').addEventListener('click', () => {
     showStatusMsg('Invalid Google Sheets URL.', true);
     return;
   }
+  
+  const match = url.match(/\/d\/([a-zA-Z0-9-_]+)\//);
+  const sheetId = match ? match[1] : null;
+
+  chrome.storage.local.set({sheetId:sheetId});
 
   chrome.storage.local.set({ googleSheetUrl: url }, () => {
     showStatusMsg('Google Sheets URL saved successfully!');

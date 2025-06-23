@@ -2,10 +2,22 @@
   "manifest_version": 3,
   "name": "Expedia Price Scraper",
   "version": "2.0",
-  "permissions": ["tabs", "scripting", "storage"],
+  "permissions": ["identity", "tabs", "scripting", "storage"],
   "host_permissions": ["https://www.expedia.com/*"],
   "background": {
     "service_worker": "background.js"
   },
-  "action": { "default_popup": "popup.html" }
+  "action": { 
+    "default_popup": "popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "firebase/firebase-app.js",
+        "firebase/firebase-auth.js",
+        "firebase/firebase-firestore.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

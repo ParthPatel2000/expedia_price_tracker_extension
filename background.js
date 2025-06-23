@@ -1,3 +1,5 @@
+// background.js
+
 // const props = [
 //   {name:"Econo Lodge", id:"8466", hotelName:"Econo%20Lodge"},
 //   {name:"Sleep Inn Concord-Kannapolis", id:"151309", hotelName:"Sleep%20Inn%20Concord%20-%20Kannapolis"},
@@ -10,10 +12,157 @@
 //   {name:"Sleep Inn & Suites at Concord Mills", id:"533926", hotelName:"Sleep%20Inn%20%26%20Suites%20at%20Concord%20Mills"}
 // ];
 
-// const props = [
-//   { name: "Econo Lodge", url: "https://www.expedia.com/Hotel-Search?destination=Kannapolis%2C%20North%20Carolina%2C%20United%20States%20of%20America&regionId=55137&latLong=35.487362%2C-80.621735&flexibility=0_DAY&d1=2025-06-15&startDate=2025-06-15&d2=2025-06-16&endDate=2025-06-16&adults=2&rooms=1&isInvalidatedDate=false&upsellingNumNightsAdded=&theme=&userIntent=&semdtl=&upsellingDiscountTypeAdded=&categorySearch=&useRewards=false&sort=RECOMMENDED&hotelName=Econo%20Lodge&selected=8466" },
-//   { name: "Sleep Inn Concord-Kannapolis", url: "https://www.expedia.com/Hotel-Search?destination=Kannapolis%2C%20North%20Carolina%2C%20United%20States%20of%20America&regionId=55137&latLong=35.487362%2C-80.621735&flexibility=0_DAY&d1=2025-06-15&startDate=2025-06-15&d2=2025-06-16&endDate=2025-06-16&adults=2&rooms=1&isInvalidatedDate=false&upsellingNumNightsAdded=&theme=&userIntent=&semdtl=&upsellingDiscountTypeAdded=&categorySearch=&useRewards=false&sort=RECOMMENDED&hotelName=Sleep%20Inn%20Concord%20-%20Kannapolis&selected=151309" }
-// ];
+
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+importScripts(
+  'firebase/firebase-app-compat.js',
+  'firebase/firebase-auth-compat.js',
+  'firebase/firebase-firestore-compat.js'
+);
+
+
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDyyvoB--tTFhPXkujZDr8AbDye7goTSF0",
+  authDomain: "expedia-price-tracker.firebaseapp.com",
+  projectId: "expedia-price-tracker",
+  storageBucket: "expedia-price-tracker.firebasestorage.app",
+  messagingSenderId: "541814014300",
+  appId: "1:541814014300:web:885e4b4805ab0d0b65c199",
+  measurementId: "G-2LM8BZW01E"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Sign in anonymously
+// auth.signInAnonymously()
+//   .then(() => {
+//     console.log("✅ Firebase anonymous login successful");
+//   })
+//   .catch((error) => {
+//     console.error("❌ Firebase auth error:", error);
+//   });
+
+
+// sync property links from Chrome storage function
+function syncPropertyLinksToFirestore() {
+  const user = firebase.auth().currentUser;
+  if (!user) return console.error("❌ Not logged in");
+
+  chrome.storage.local.get('propertyLinks', (result) => {
+    const propertyLinks = result.propertyLinks || [];
+
+    db.collection("users").doc(user.uid).set({ propertyLinks }, { merge: true })
+      .then(() => console.log("✅ Synced propertyLinks to Firestore"))
+      .catch(err => console.error("❌ Sync error:", err));
+  });
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'syncPropertyLinks') {
+    syncPropertyLinksToFirestore();
+  }
+});
+
+// Function to download property links from Firestore to Chrome storage
+function downloadPropertyLinksFromFirestore() {
+  const user = firebase.auth().currentUser;
+
+  if (!user) {
+    console.error("❌ Not signed in. Can't download data.");
+    return;
+  }
+
+  const docRef = db.collection("users").doc(user.uid);
+
+  docRef.get().then(doc => {
+    if (!doc.exists) {
+      console.warn("⚠️ No propertyLinks found in Firestore.");
+      return;
+    }
+
+    const data = doc.data();
+    const cloudLinks = data.propertyLinks || [];
+
+    chrome.storage.local.set({ propertyLinks: cloudLinks }, () => {
+      console.log("✅ Downloaded and saved propertyLinks from Firestore to local storage.");
+    });
+  }).catch(err => {
+    console.error("❌ Error fetching propertyLinks from Firestore:", err);
+  });
+}
+
+// Listen for messages from popup or content scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'downloadPropertyLinks') {
+    downloadPropertyLinksFromFirestore();
+  }
+});
+
+
+
+
+
+
+// Function to launch Google OAuth flow using web app authentication
+function launchGoogleOAuth() {
+  const clientId = "541814014300-4fhosq4k2rihu2qjrds1sut1cq8r012q.apps.googleusercontent.com";
+  const redirectUri = chrome.identity.getRedirectURL();
+
+  console.log("Redirect URI your extension uses:", redirectUri);
+
+  const authUrl =
+    `https://accounts.google.com/o/oauth2/v2/auth` +
+    `?client_id=${clientId}` +
+    `&response_type=token` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=profile email` +
+    `&prompt=select_account`;
+
+  chrome.identity.launchWebAuthFlow(
+    { url: authUrl, interactive: true },
+    (redirectUrl) => {
+      if (chrome.runtime.lastError || !redirectUrl) {
+        console.error("❌ Auth failed or canceled:", chrome.runtime.lastError);
+        return;
+      }
+
+      // Extract access token
+      const m = redirectUrl.match(/access_token=([^&]+)/);
+      if (m && m[1]) {
+        const accessToken = m[1];
+        console.log("✅ Access Token:", accessToken);
+
+        // 👇 Sign in to Firebase with the Google access token
+        const credential = firebase.auth.GoogleAuthProvider.credential(null, accessToken);
+        firebase.auth().signInWithCredential(credential)
+          .then((userCredential) => {
+            console.log("✅ Firebase sign-in success:", userCredential.user);
+
+            // Sync property links from Chrome storage to Firestore
+            // syncPropertyLinksToFirestore();
+
+          })
+          .catch((error) => {
+            console.error("❌ Firebase sign-in error:", error);
+          });
+
+      } else {
+        console.error("❌ No access token found in redirect URL");
+      }
+    }
+  );
+}
+
+
+
+
+
+// <-------------------------------------------------------------------------------------------->
+
+
 
 let props = []; // Global variable to hold properties loaded from storage
 
@@ -56,14 +205,14 @@ function generateUrls() {
 
 async function openTabsAndScrape() {
   chrome.storage.local.get('propertyLinks', (result) => {
-  if (Array.isArray(result.propertyLinks)) {
-    props = result.propertyLinks;
-    console.log("✅ Loaded props from storage:", props);
-  } else {
-    console.warn("⚠️ No propertyLinks found in storage.");
-  }
+    if (Array.isArray(result.propertyLinks)) {
+      props = result.propertyLinks;
+      console.log("✅ Loaded props from storage:", props);
+    } else {
+      console.warn("⚠️ No propertyLinks found in storage.");
+    }
   });
-  
+
   const urls = generateUrls();
 
   chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
@@ -92,8 +241,16 @@ async function openTabsAndScrape() {
   });
 }
 
+// Listen for the extension icon click to start scraping
 chrome.action.onClicked.addListener(() => {
   openTabsAndScrape();
+});
+
+//listen for Google OAuth login request
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'startGoogleOAuth') {
+    launchGoogleOAuth();
+  }
 });
 
 chrome.runtime.onMessage.addListener((message) => {

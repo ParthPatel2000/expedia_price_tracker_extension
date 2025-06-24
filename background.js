@@ -7,6 +7,8 @@ importScripts(
   'firebase/firebase-firestore-compat.js'
 );
 
+
+
 // Initialize Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDyyvoB--tTFhPXkujZDr8AbDye7goTSF0",
@@ -26,7 +28,6 @@ const db = firebase.firestore();
 // sync property links from Chrome storage function
 function syncPropertyLinksToFirestore() {
   const user = firebase.auth().currentUser;
-  if (!user) return console.error("❌ Not logged in");
 
   chrome.storage.local.get('propertyLinks', (result) => {
     const propertyLinks = result.propertyLinks || [];
@@ -50,11 +51,6 @@ function downloadPropertyLinksFromFirestore() {
   const docRef = db.collection("users").doc(user.uid);
 
   docRef.get().then(doc => {
-    if (!doc.exists) {
-      console.warn("⚠️ No propertyLinks found in Firestore.");
-      // return;
-    }
-
     const data = doc.data();
     const cloudLinks = data.propertyLinks || [];
 
@@ -63,7 +59,7 @@ function downloadPropertyLinksFromFirestore() {
     });
   }).catch(err => {
     chrome.storage.local.set({ propertyLinks: [] }, () => {
-      console.log("⚠️ No propertyLinks found in Firestore. Defaulting to empty array.");
+      console.warn("⚠️ No propertyLinks found in Firestore. Defaulting to empty array.");
     });
   });
 }
@@ -76,7 +72,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 
+//function to change user's authentication state
+//saves a uthentication state to local storage
+function authStateChange(newState) {
+  if (newState === 'anonymous') {
+    chrome.storage.local.set({ authState: 'anonymous' }, () => {
+      console.log("✅ Authentication state set to anonymous");
+    });
 
+  } else if (newState === 'google') {
+    chrome.storage.local.set({ authState: 'google' }, () => {
+      console.log("✅ Authentication state set to Google");
+    });
+
+  }
+  return;
+}
+
+firebase.auth().onAuthStateChanged((user) => {
+  if (user) {
+    authStateChange(user.isAnonymous ? 'anonymous' : 'google');
+  } else {
+    authStateChange('none');
+  }
+});
 
 
 
@@ -112,38 +131,27 @@ function launchGoogleOAuth() {
         const credential = firebase.auth.GoogleAuthProvider.credential(null, accessToken);
         const currentUser = firebase.auth().currentUser;
 
-        if (currentUser && currentUser.isAnonymous) {
-          // 🔄 Upgrade anonymous account to Google account
-          currentUser.linkWithCredential(credential)
-            .then((userCredential) => {
-              console.log("🔄 Anonymous account upgraded to Google:", userCredential.user);
-            })
-            .catch(error => {
-              if (error.code === 'auth/credential-already-in-use') {
-                console.warn("⚠️ Google account already linked to another user. Switching to signInWithCredential.");
-                firebase.auth().signInWithCredential(credential)
-                  .then(userCredential => {
-                    console.log("✅ Signed in with Google:", userCredential.user);
-                    downloadPropertyLinksFromFirestore(); // Load property links after sign-in
-                  })
-                  .catch(err => {
-                    console.error("❌ Error signing in:", err);
-                  });
-              } else {
-                console.error("❌ linkWithCredential failed:", error);
-              }
-            });
-        }
-        // else {
-        //   // 🚪 Direct Google login (user not anonymous or no user)
-        //   firebase.auth().signInWithCredential(credential)
-        //     .then((userCredential) => {
-        //       console.log("✅ Signed in with Google:", userCredential.user);
-        //     })
-        //     .catch((error) => {
-        //       console.error("❌ Firebase sign-in error:", error);
-        //     });
-        // }
+        // 🔄 Upgrade anonymous account to Google account
+        currentUser.linkWithCredential(credential)
+          .then((userCredential) => {
+            console.log("🔄 Anonymous account upgraded to Google:", userCredential.user);
+          })
+          .catch(error => {
+            if (error.code === 'auth/credential-already-in-use') {
+              console.warn("⚠️ Google account already linked to another user. Switching to signInWithCredential.");
+              firebase.auth().signInWithCredential(credential)
+                .then(userCredential => {
+                  console.log("✅ Signed in with Google:", userCredential.user);
+                  downloadPropertyLinksFromFirestore(); // Load property links after sign-in
+                })
+                .catch(err => {
+                  console.error("❌ Error signing in:", err);
+                });
+            } else {
+              console.error("❌ linkWithCredential failed:", error);
+            }
+          });
+
       } else {
         console.error("❌ No access token found in redirect URL");
       }
@@ -159,7 +167,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     firebase.auth().signOut()
       .then(() => {
         console.log("👋 User signed out successfully.");
-        chrome.storage.local.remove('prices', () => {
+        chrome.storage.local.remove(['propertyLinks', 'prices'], () => {
           console.log("✅ Cleared propertyLinks from local storage.");
         });
         // Optionally sign in anonymously again
@@ -176,48 +184,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 
 
+
+
 // <--------------------------------------Startup Sequence------------------------------------------------------>
 function loginAtStartup() {
-  firebase.auth().onAuthStateChanged(user => {
+  firebase.auth().onAuthStateChanged(async (user) => {
     if (user) {
+      // Save auth state locally
+      authStateChange(user.isAnonymous ? 'anonymous' : 'google');
+
+      // First-time or returning?
       const isFirstTime = user.metadata.creationTime === user.metadata.lastSignInTime;
 
-      if (isFirstTime) {
-        console.log("🆕 First-time Firebase sign-in");
+      if (isFirstTime && user.isAnonymous) {
+        console.log("🆕 New anonymous user:", user.uid);
       } else {
-        console.log("🔁 Returning Firebase user");
-        downloadPropertyLinksFromFirestore();
+        console.log("🔁 Returning user:", user.isAnonymous ? 'anonymous' : user.email);
+        // downloadPropertyLinksFromFirestore(); // Sync on return
       }
-
-      if (user.isAnonymous) {
-        console.log("🟤 Anonymous user:", user.uid);
-        downloadPropertyLinksFromFirestore();
-      } else {
-        console.log("🟢 Google-authenticated user:", user.email);
-        downloadPropertyLinksFromFirestore();
-      }
-
-
-
     } else {
-      console.log("🚫 No user signed in. Attempting anonymous sign-in...");
-
-      firebase.auth().signInAnonymously()
-        .then(() => {
-          console.log("✅ Anonymous sign-in successful");
-        })
-        .catch(error => {
-          console.error("❌ Failed to sign in anonymously:", error);
-        });
+      // No user? Sign in anonymously
+      try {
+        const cred = await firebase.auth().signInAnonymously();
+        console.log("✅ Anonymous login successful:", cred.user.uid);
+        authStateChange('anonymous');
+        chrome.storage.local.set({ loginAtStartup: true });
+      } catch (err) {
+        console.error("❌ Anonymous login failed:", err);
+      }
     }
   });
 }
+
 
 //listener for the call from popup.js to start the login process
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'loginAtStartup') {
     loginAtStartup();  // your function can be async if needed
-    return true; // ✅ Keeps the message channel open for async operations
+    // return true; // ✅ Keeps the message channel open for async operations
   }
 });
 
@@ -235,6 +239,20 @@ chrome.storage.local.get('propertyLinks', (result) => {
     console.warn("⚠️ No propertyLinks found in storage.");
   }
 });
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.propertyLinks) {
+    chrome.storage.local.get('propertyLinks', (result) => {
+      if (Array.isArray(result.propertyLinks)) {
+        props = result.propertyLinks;
+        console.log("✅ Loaded props from storage:", props);
+      } else {
+        console.warn("⚠️ No propertyLinks found in storage.");
+      }
+    });
+  }
+});
+
 
 function formatDate(date) {
   const year = date.getFullYear();
@@ -265,15 +283,7 @@ function generateUrls() {
 }
 
 async function openTabsAndScrape() {
-  chrome.storage.local.get('propertyLinks', (result) => {
-    if (Array.isArray(result.propertyLinks)) {
-      props = result.propertyLinks;
-      console.log("✅ Loaded props from storage:", props);
-    } else {
-      console.warn("⚠️ No propertyLinks found in storage.");
-    }
-  });
-
+  
   const urls = generateUrls();
 
   chrome.storage.local.get({ backgroundTabs: true }, async (result) => {

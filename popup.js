@@ -54,8 +54,48 @@ function showPricesView() {
 function showSettingsView() {
   document.getElementById('pricesView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'block';
+  chrome.storage.local.get('authState', (result) => {
+    updateAuthUI(result.authState);
+  });
   clearStatusMsg();
 }
+
+// Check authentication state and update UI
+
+function updateAuthUI(authState) {
+  const loginBtn = document.getElementById('googleLoginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const userInfo = document.getElementById('userInfo');
+
+  if (authState === 'google') {
+    loginBtn.disabled = true;
+    logoutBtn.disabled = false;
+    userInfo.textContent = "✅ Logged in with Google";
+  } else {
+    loginBtn.disabled = false;
+    logoutBtn.disabled = true;
+    userInfo.textContent = "👤 Anonymous user";
+  }
+}
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local') {
+    if (changes.authState) {
+      const newState = changes.authState.newValue;
+      updateAuthUI(newState); // You can define this function to update UI
+    }
+
+    if (changes.prices) {
+      loadPrices(); // re-render prices in the popup
+    }
+
+    if (changes.propertyLinks) {
+      console.log("🔄 Property links changed");
+    }
+  }
+});
+
+
 
 // Load background tab toggle state
 function loadBackgroundTabSetting() {
@@ -168,5 +208,6 @@ function clearStatusMsg() {
 window.onload = () => {
   showPricesView();
   loadBackgroundTabSetting();
-  chrome.runtime.sendMessage({action: 'loginAtStartup'});
+  chrome.runtime.sendMessage({ action: 'loginAtStartup' });
+
 };

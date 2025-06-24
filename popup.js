@@ -70,6 +70,11 @@ document.getElementById('backgroundTabSwitch').addEventListener('change', functi
   chrome.storage.local.set({ backgroundTabs: isChecked });
 });
 
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'logoutUser' });
+});
+
+
 // adding the current page to the storage.
 function addCurrentExpediaLink() {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -156,8 +161,12 @@ function clearStatusMsg() {
   status.className = '';
 }
 
+//call the loginAtStartup function to check if the user is logged in
+
+
 // Load initial UI state on popup open
 window.onload = () => {
   showPricesView();
   loadBackgroundTabSetting();
+  chrome.runtime.sendMessage({action: 'loginAtStartup'});
 };

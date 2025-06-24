@@ -1,18 +1,5 @@
 // background.js
 
-// const props = [
-//   {name:"Econo Lodge", id:"8466", hotelName:"Econo%20Lodge"},
-//   {name:"Sleep Inn Concord-Kannapolis", id:"151309", hotelName:"Sleep%20Inn%20Concord%20-%20Kannapolis"},
-//   {name:"Country Inn & Suites by Radisson", id:"3580997", hotelName:"Country%20Inn%20%26%20Suites%20by%20Radisson%2C%20Concord%20%28Kannapolis%29%2C%20NC"},
-//   {name:"Cabarrus Inn", id:"57359013", hotelName:"Cabarrus%20Inn"},
-//   {name:"Rodeway Inn", id:"7422", hotelName:"Rodeway%20Inn"},
-//   {name:"Microtel Inn & Suites by Wyndham Kannapolis/Concord", id:"328797", hotelName:"Microtel%20Inn%20%26%20Suites%20by%20Wyndham%20Kannapolis%2FConcord"},
-//   {name:"Spark by Hilton Kannapolis", id:"42708", hotelName:"Spark%20by%20Hilton%20Kannapolis"},
-//   {name:"Comfort Suites Concord Mills", id:"912941", hotelName:"Comfort%20Suites%20Concord%20Mills"},
-//   {name:"Sleep Inn & Suites at Concord Mills", id:"533926", hotelName:"Sleep%20Inn%20%26%20Suites%20at%20Concord%20Mills"}
-// ];
-
-
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 importScripts(
   'firebase/firebase-app-compat.js',
@@ -20,8 +7,7 @@ importScripts(
   'firebase/firebase-firestore-compat.js'
 );
 
-
-
+// Initialize Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDyyvoB--tTFhPXkujZDr8AbDye7goTSF0",
   authDomain: "expedia-price-tracker.firebaseapp.com",
@@ -35,15 +21,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
-
-// Sign in anonymously
-// auth.signInAnonymously()
-//   .then(() => {
-//     console.log("✅ Firebase anonymous login successful");
-//   })
-//   .catch((error) => {
-//     console.error("❌ Firebase auth error:", error);
-//   });
 
 
 // sync property links from Chrome storage function
@@ -70,17 +47,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function downloadPropertyLinksFromFirestore() {
   const user = firebase.auth().currentUser;
 
-  if (!user) {
-    console.error("❌ Not signed in. Can't download data.");
-    return;
-  }
-
   const docRef = db.collection("users").doc(user.uid);
 
   docRef.get().then(doc => {
     if (!doc.exists) {
       console.warn("⚠️ No propertyLinks found in Firestore.");
-      return;
+      // return;
     }
 
     const data = doc.data();
@@ -90,7 +62,9 @@ function downloadPropertyLinksFromFirestore() {
       console.log("✅ Downloaded and saved propertyLinks from Firestore to local storage.");
     });
   }).catch(err => {
-    console.error("❌ Error fetching propertyLinks from Firestore:", err);
+    chrome.storage.local.set({ propertyLinks: [] }, () => {
+      console.log("⚠️ No propertyLinks found in Firestore. Defaulting to empty array.");
+    });
   });
 }
 
@@ -133,22 +107,43 @@ function launchGoogleOAuth() {
       const m = redirectUrl.match(/access_token=([^&]+)/);
       if (m && m[1]) {
         const accessToken = m[1];
-        console.log("✅ Access Token:", accessToken);
+        console.log("✅ Google Access Token:", accessToken);
 
-        // 👇 Sign in to Firebase with the Google access token
         const credential = firebase.auth.GoogleAuthProvider.credential(null, accessToken);
-        firebase.auth().signInWithCredential(credential)
-          .then((userCredential) => {
-            console.log("✅ Firebase sign-in success:", userCredential.user);
+        const currentUser = firebase.auth().currentUser;
 
-            // Sync property links from Chrome storage to Firestore
-            // syncPropertyLinksToFirestore();
-
-          })
-          .catch((error) => {
-            console.error("❌ Firebase sign-in error:", error);
-          });
-
+        if (currentUser && currentUser.isAnonymous) {
+          // 🔄 Upgrade anonymous account to Google account
+          currentUser.linkWithCredential(credential)
+            .then((userCredential) => {
+              console.log("🔄 Anonymous account upgraded to Google:", userCredential.user);
+            })
+            .catch(error => {
+              if (error.code === 'auth/credential-already-in-use') {
+                console.warn("⚠️ Google account already linked to another user. Switching to signInWithCredential.");
+                firebase.auth().signInWithCredential(credential)
+                  .then(userCredential => {
+                    console.log("✅ Signed in with Google:", userCredential.user);
+                    downloadPropertyLinksFromFirestore(); // Load property links after sign-in
+                  })
+                  .catch(err => {
+                    console.error("❌ Error signing in:", err);
+                  });
+              } else {
+                console.error("❌ linkWithCredential failed:", error);
+              }
+            });
+        }
+        // else {
+        //   // 🚪 Direct Google login (user not anonymous or no user)
+        //   firebase.auth().signInWithCredential(credential)
+        //     .then((userCredential) => {
+        //       console.log("✅ Signed in with Google:", userCredential.user);
+        //     })
+        //     .catch((error) => {
+        //       console.error("❌ Firebase sign-in error:", error);
+        //     });
+        // }
       } else {
         console.error("❌ No access token found in redirect URL");
       }
@@ -157,13 +152,79 @@ function launchGoogleOAuth() {
 }
 
 
+// Function to log out the user
+// This will clear the local storage and Firestore data
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'logoutUser') {
+    firebase.auth().signOut()
+      .then(() => {
+        console.log("👋 User signed out successfully.");
+        chrome.storage.local.remove('prices', () => {
+          console.log("✅ Cleared propertyLinks from local storage.");
+        });
+        // Optionally sign in anonymously again
+        return firebase.auth().signInAnonymously();
+      })
+      .then(() => {
+        console.log("🔄 Reverted to anonymous user after logout.");
+      })
+      .catch((error) => {
+        console.error("❌ Sign-out error:", error);
+      });
+  }
+});
 
 
 
-// <-------------------------------------------------------------------------------------------->
+// <--------------------------------------Startup Sequence------------------------------------------------------>
+function loginAtStartup() {
+  firebase.auth().onAuthStateChanged(user => {
+    if (user) {
+      const isFirstTime = user.metadata.creationTime === user.metadata.lastSignInTime;
+
+      if (isFirstTime) {
+        console.log("🆕 First-time Firebase sign-in");
+      } else {
+        console.log("🔁 Returning Firebase user");
+        downloadPropertyLinksFromFirestore();
+      }
+
+      if (user.isAnonymous) {
+        console.log("🟤 Anonymous user:", user.uid);
+        downloadPropertyLinksFromFirestore();
+      } else {
+        console.log("🟢 Google-authenticated user:", user.email);
+        downloadPropertyLinksFromFirestore();
+      }
 
 
 
+    } else {
+      console.log("🚫 No user signed in. Attempting anonymous sign-in...");
+
+      firebase.auth().signInAnonymously()
+        .then(() => {
+          console.log("✅ Anonymous sign-in successful");
+        })
+        .catch(error => {
+          console.error("❌ Failed to sign in anonymously:", error);
+        });
+    }
+  });
+}
+
+//listener for the call from popup.js to start the login process
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'loginAtStartup') {
+    loginAtStartup();  // your function can be async if needed
+    return true; // ✅ Keeps the message channel open for async operations
+  }
+});
+
+
+
+
+// <------------------------------------------Scraping logic--------------------------------------------------->
 let props = []; // Global variable to hold properties loaded from storage
 
 chrome.storage.local.get('propertyLinks', (result) => {
@@ -253,6 +314,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// main scraping and storage logic
 chrome.runtime.onMessage.addListener((message) => {
   console.log(`📩 Received price for ${message.hotelName}: ${message.price}`);
 
@@ -275,4 +337,4 @@ chrome.runtime.onMessage.addListener((message) => {
     });
   }
 });
-
+// <------------------------------------------------------------------------------------------------>

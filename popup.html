@@ -145,13 +145,31 @@
   <!-- Settings View -->
   <div id="settingsView">
     <h3>Settings</h3>
-    <button id="add-link">➕ Add This Property</button>
-    <button id="backBtn" style="margin-left: 8px;">Back</button>
-    <button id="googleLoginBtn">Sign in with Google</button>
-    <button id="syncFirestoreBtn">Sync Property Links to Firestore</button>
-    <button id="downloadFromCloudBtn">⬇️ Sync from Cloud</button>
-    <div id="userInfo" style="margin-top:10px; font-size:14px;"></div>
-    <div id="statusMsg"></div>
+
+    <!-- Property Actions -->
+    <div style="margin-bottom: 12px;">
+      <button id="add-link">➕ Add This Property</button>
+      <button id="syncFirestoreBtn">⬆️ Sync to Cloud</button>
+      <button id="downloadFromCloudBtn">⬇️ Sync from Cloud</button>
+    </div>
+
+    <!-- Authentication Actions -->
+    <div style="margin-bottom: 12px;">
+      <button id="googleLoginBtn">🔐 Sign in with Google</button>
+      <button id="logoutBtn" style="margin-left: 8px;">🚪 Logout</button>
+    </div>
+
+    <!-- Navigation -->
+    <div style="margin-bottom: 12px;">
+      <button id="backBtn">🔙 Back</button>
+    </div>
+
+    <!-- User Info -->
+    <div id="userInfo" style="margin-top:10px; font-size:14px; color: #333;"></div>
+
+    <!-- Status Message -->
+    <div id="statusMsg" style="margin-top: 8px; font-size: 13px;"></div>
+
   </div>
 
 

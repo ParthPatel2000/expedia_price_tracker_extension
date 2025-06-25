@@ -156,6 +156,23 @@ function addCurrentExpediaLink() {
   });
 }
 
+// Load saved delay on popup open
+chrome.storage.local.get({ pageDelay: 6 }, (result) => {
+  document.getElementById('delayInput').value = result.pageDelay;
+});
+
+// Save delay on button click
+document.getElementById('saveDelayBtn').addEventListener('click', () => {
+  const delay = parseInt(document.getElementById('delayInput').value);
+  if (!isNaN(delay) && delay > 0) {
+    chrome.storage.local.set({ pageDelay: delay }, () => {
+      console.log(`✅ Page delay saved: ${delay} sec`);
+    });
+  } else {
+    alert("Please enter a valid number greater than 0.");
+  }
+});
+
 
 // Event listeners for buttons
 document.getElementById('settingsBtn').addEventListener('click', showSettingsView);

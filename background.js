@@ -200,7 +200,6 @@ function loginAtStartup() {
         console.log("🆕 New anonymous user:", user.uid);
       } else {
         console.log("🔁 Returning user:", user.isAnonymous ? 'anonymous' : user.email);
-        // downloadPropertyLinksFromFirestore(); // Sync on return
       }
     } else {
       // No user? Sign in anonymously
@@ -254,6 +253,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 
+function getRandomizedDelay(baseSeconds) {
+  const jitter = Math.random() * 2 - 1; // random number between -1 and +1
+  const finalDelay = baseSeconds + jitter;
+  return Math.max(2, finalDelay) * 1000; // ensure minimum 2s delay
+}
+
+
 function formatDate(date) {
   const year = date.getFullYear();
   // getMonth() returns 0-11, so add 1 and pad with leading zero
@@ -283,7 +289,7 @@ function generateUrls() {
 }
 
 async function openTabsAndScrape() {
-  
+
   const urls = generateUrls();
 
   chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
@@ -298,7 +304,14 @@ async function openTabsAndScrape() {
         await chrome.tabs.update(tab.id, { url });
       }
 
-      await new Promise(r => setTimeout(r, 6000));
+      const delay = await new Promise((resolve) => {
+        chrome.storage.local.get({ pageDelay: 6 }, (res) => resolve(res.pageDelay * 1000));
+      });
+
+      // let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
+
+      await new Promise(r => setTimeout(r, getRandomizedDelay(delay / 1000)));
+
 
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },

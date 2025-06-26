@@ -16,5 +16,9 @@
     "url": "https://github.com/ParthPatel2000/expedia_price_tracker_extension/issues"
   },
   "homepage": "https://github.com/ParthPatel2000/expedia_price_tracker_extension#readme",
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "webpack": "^5.99.9",
+    "webpack-cli": "^6.0.1"
+  }
 }

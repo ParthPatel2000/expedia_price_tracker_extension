@@ -2,9 +2,9 @@
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 importScripts(
-  'firebase/firebase-app-compat.js',
-  'firebase/firebase-auth-compat.js',
-  'firebase/firebase-firestore-compat.js'
+  '../../firebase/firebase-app-compat.js',
+  '../../firebase/firebase-auth-compat.js',
+  '../../firebase/firebase-firestore-compat.js'
 );
 
 
@@ -315,7 +315,7 @@ async function openTabsAndScrape() {
 
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ['content.js']
+        files: ['src/content.js']
       });
     }
 

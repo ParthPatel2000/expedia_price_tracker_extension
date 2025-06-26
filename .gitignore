@@ -1,13 +1,26 @@
-properties.js
-
-# Node.js
+# Node modules
 node_modules/
+
+# Environment variables
 .env
+
+# Webpack build output
 dist/
-.DS_Store
+.cache/
+webpack-stats.json
 
 # Logs
 *.log
 
-# OS generated files
+# OS-specific files
+.DS_Store
 Thumbs.db
+
+# VSCode settings (optional)
+.vscode/
+
+# Chrome extension dev artifacts
+*.pem  # If you generate a private key for testing
+
+# System files
+*.swp

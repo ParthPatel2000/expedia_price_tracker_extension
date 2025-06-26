@@ -5,10 +5,10 @@
   "permissions": ["identity", "tabs", "scripting", "storage"],
   "host_permissions": ["https://www.expedia.com/*"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background.js"
   },
-  "action": { 
-    "default_popup": "popup.html"
+  "action": {
+    "default_popup": "/src/popup/popup.html"
   },
   "web_accessible_resources": [
     {

@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "background.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack --mode production"
   },
   "repository": {
     "type": "git",
@@ -18,7 +19,11 @@
   "homepage": "https://github.com/ParthPatel2000/expedia_price_tracker_extension#readme",
   "description": "",
   "devDependencies": {
+    "copy-webpack-plugin": "^13.0.0",
     "webpack": "^5.99.9",
     "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "firebase": "^11.9.1"
   }
 }

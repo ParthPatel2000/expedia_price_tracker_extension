@@ -1,13 +1,16 @@
 // background.js
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-importScripts(
-  '../../firebase/firebase-app-compat.js',
-  '../../firebase/firebase-auth-compat.js',
-  '../../firebase/firebase-firestore-compat.js'
-);
+// importScripts(
+//   '../../firebase/firebase-app-compat.js',
+//   '../../firebase/firebase-auth-compat.js',
+//   '../../firebase/firebase-firestore-compat.js'
+// );
 
 
+import { initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithCredential, linkWithCredential, signOut } from 'firebase/auth/web-extension';
+import { getFirestore, collection, doc, setDoc, getDoc } from 'firebase/firestore';
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -20,19 +23,19 @@ const firebaseConfig = {
   measurementId: "G-2LM8BZW01E"
 };
 
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 
 // sync property links from Chrome storage function
 function syncPropertyLinksToFirestore() {
-  const user = firebase.auth().currentUser;
+  const user = auth.currentUser;
 
   chrome.storage.local.get('propertyLinks', (result) => {
     const propertyLinks = result.propertyLinks || [];
 
-    db.collection("users").doc(user.uid).set({ propertyLinks }, { merge: true })
+    setDoc(doc(db, "users", user.uid), { propertyLinks }, { merge: true })
       .then(() => console.log("✅ Synced propertyLinks to Firestore"))
       .catch(err => console.error("❌ Sync error:", err));
   });
@@ -46,11 +49,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Function to download property links from Firestore to Chrome storage
 function downloadPropertyLinksFromFirestore() {
-  const user = firebase.auth().currentUser;
+  const user = auth.currentUser;
 
-  const docRef = db.collection("users").doc(user.uid);
+  const docRef = doc(db, "users", user.uid);
 
-  docRef.get().then(doc => {
+  getDoc(docRef).then(doc => {
     const data = doc.data();
     const cloudLinks = data.propertyLinks || [];
 
@@ -89,7 +92,8 @@ function authStateChange(newState) {
   return;
 }
 
-firebase.auth().onAuthStateChanged((user) => {
+// Monitor auth state changes
+onAuthStateChanged(auth, (user) => {
   if (user) {
     authStateChange(user.isAnonymous ? 'anonymous' : 'google');
   } else {
@@ -128,18 +132,18 @@ function launchGoogleOAuth() {
         const accessToken = m[1];
         console.log("✅ Google Access Token:", accessToken);
 
-        const credential = firebase.auth.GoogleAuthProvider.credential(null, accessToken);
-        const currentUser = firebase.auth().currentUser;
+        const credential = GoogleAuthProvider.credential(null, accessToken);
+        const currentUser = auth.currentUser;
 
         // 🔄 Upgrade anonymous account to Google account
-        currentUser.linkWithCredential(credential)
+        linkWithCredential(currentUser, credential)
           .then((userCredential) => {
             console.log("🔄 Anonymous account upgraded to Google:", userCredential.user);
           })
           .catch(error => {
             if (error.code === 'auth/credential-already-in-use') {
               console.warn("⚠️ Google account already linked to another user. Switching to signInWithCredential.");
-              firebase.auth().signInWithCredential(credential)
+              signInWithCredential(auth, credential)
                 .then(userCredential => {
                   console.log("✅ Signed in with Google:", userCredential.user);
                   downloadPropertyLinksFromFirestore(); // Load property links after sign-in
@@ -164,14 +168,14 @@ function launchGoogleOAuth() {
 // This will clear the local storage and Firestore data
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'logoutUser') {
-    firebase.auth().signOut()
+    signOut(auth)
       .then(() => {
         console.log("👋 User signed out successfully.");
         chrome.storage.local.remove(['propertyLinks', 'prices'], () => {
           console.log("✅ Cleared propertyLinks from local storage.");
         });
         // Optionally sign in anonymously again
-        return firebase.auth().signInAnonymously();
+        return signInAnonymously(auth);
       })
       .then(() => {
         console.log("🔄 Reverted to anonymous user after logout.");
@@ -188,7 +192,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // <--------------------------------------Startup Sequence------------------------------------------------------>
 function loginAtStartup() {
-  firebase.auth().onAuthStateChanged(async (user) => {
+  onAuthStateChanged(auth, async (user) => {
     if (user) {
       // Save auth state locally
       authStateChange(user.isAnonymous ? 'anonymous' : 'google');
@@ -204,7 +208,7 @@ function loginAtStartup() {
     } else {
       // No user? Sign in anonymously
       try {
-        const cred = await firebase.auth().signInAnonymously();
+        const cred = await signInAnonymously(auth);
         console.log("✅ Anonymous login successful:", cred.user.uid);
         authStateChange('anonymous');
         chrome.storage.local.set({ loginAtStartup: true });
@@ -315,7 +319,7 @@ async function openTabsAndScrape() {
 
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ['src/content.js']
+        files: ['content.js']
       });
     }
 

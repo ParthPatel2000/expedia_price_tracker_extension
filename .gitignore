@@ -1,1 +1,13 @@
 properties.js
+
+# Node.js
+node_modules/
+.env
+dist/
+.DS_Store
+
+# Logs
+*.log
+
+# OS generated files
+Thumbs.db

@@ -1,0 +1,20 @@
+{
+  "name": "expedia-price-tracker",
+  "version": "1.0.0",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ParthPatel2000/expedia_price_tracker_extension.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ParthPatel2000/expedia_price_tracker_extension/issues"
+  },
+  "homepage": "https://github.com/ParthPatel2000/expedia_price_tracker_extension#readme",
+  "description": ""
+}

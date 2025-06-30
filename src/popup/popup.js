@@ -57,6 +57,7 @@ function showSettingsView() {
   chrome.storage.local.get('authState', (result) => {
     updateAuthUI(result.authState);
   });
+  loadSavedEmail();
   clearStatusMsg();
 }
 
@@ -95,7 +96,20 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
+// Load saved email from chrome.storage.local as a function
+function loadSavedEmail() {
+  chrome.storage.local.get('notificationEmail', (data) => {
+    if (data.notificationEmail) {
+      document.getElementById('emailInput').value = data.notificationEmail || '';
+    }
+  });
+}
 
+//Add user notification email input and save to storage
+document.getElementById('saveEmailBtn').addEventListener('click', function () {
+  const email = document.getElementById('emailInput').value;
+  chrome.storage.local.set({ notificationEmail: email , sendEmail : false});
+});
 
 // Load background tab toggle state
 function loadBackgroundTabSetting() {

@@ -67,6 +67,40 @@ function downloadPropertyLinksFromFirestore() {
   });
 }
 
+// Function to update the sendEmail request document in Firestore
+async function updateSendEmailRequest(userId, requestData) {
+  const requestRef = doc(db, "users", userId, "emailRequests", "send");
+
+  await setDoc(requestRef, {
+    sendEmail: requestData.sendEmail || false,
+    price: requestData.price || 0,
+    updatedAt: new Date(),
+    ...requestData
+  }, { merge: true });
+
+  console.log(`✅ Updated sendEmail request doc for user ${userId}`);
+}
+
+
+//listen for change in user email and create user document in firestore
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.notificationEmail) {
+    const newEmail = changes.notificationEmail.newValue;
+
+    const user = auth.currentUser;
+    if (user) {      
+      //just for testing purposes
+      updateSendEmailRequest(user.uid, {
+        sendEmail: false,
+        price: 0,
+        email: newEmail
+      });
+      console.log(`✅ User document updated with new email: ${newEmail}`);
+      //just for testing purposes
+    }
+  }
+});
+
 // Listen for messages from popup or content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'downloadPropertyLinks') {

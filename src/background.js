@@ -67,39 +67,7 @@ function downloadPropertyLinksFromFirestore() {
   });
 }
 
-// Function to update the sendEmail request document in Firestore
-async function updateSendEmailRequest(userId, requestData) {
-  const requestRef = doc(db, "users", userId, "emailRequests", "send");
 
-  await setDoc(requestRef, {
-    sendEmail: requestData.sendEmail || false,
-    price: requestData.price || 0,
-    updatedAt: new Date(),
-    ...requestData
-  }, { merge: true });
-
-  console.log(`✅ Updated sendEmail request doc for user ${userId}`);
-}
-
-
-//listen for change in user email and create user document in firestore
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && changes.notificationEmail) {
-    const newEmail = changes.notificationEmail.newValue;
-
-    const user = auth.currentUser;
-    if (user) {      
-      //just for testing purposes
-      updateSendEmailRequest(user.uid, {
-        sendEmail: false,
-        price: 0,
-        email: newEmail
-      });
-      console.log(`✅ User document updated with new email: ${newEmail}`);
-      //just for testing purposes
-    }
-  }
-});
 
 // Listen for messages from popup or content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -220,9 +188,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// <--------------------------------------End of Firebase Setup-------------------------------------------------->
+
+//<--------------------------------------Notification System ------------------------------------------------------>
+
+// Function to update the sendEmail request document in Firestore
+async function updateSendEmailRequest(userId, requestData) {
+  const requestRef = doc(db, "users", userId, "emailRequests", "send");
+
+  const user = auth.currentUser;
+  const email = user ? user.email : '';
+  if (!user) {
+    console.warn("⚠️ No authenticated user found to update email request.");
+    return;
+  }
+  await setDoc(requestRef, {
+    sendEmail: requestData.sendEmail || false,
+    price: requestData.price || 0,
+    email: email,
+    updatedAt: new Date(),
+    ...requestData
+  }, { merge: true });
+
+  console.log(`✅ Updated sendEmail request doc for user ${userId}`);
+}
+
+// Function to send Prices data to email request from Firestore
+async function sendEmailRequest() {
+
+  const prices = await chrome.storage.local.get('prices');
+  const requestData = {
+    sendEmail: true,
+    price: prices || {}, // Set to 0 or any default value
+  };
+  const user = auth.currentUser;
+  if (user) {
+    updateSendEmailRequest(user.uid, requestData);
+  }
+}
 
 
-
+// Listen for Send Email button click in popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'sendEmailRequest') {
+    const user = auth.currentUser;
+    if (user) {
+      sendEmailRequest(user.uid, message.data);
+    }
+  }
+});
 
 // <--------------------------------------Startup Sequence------------------------------------------------------>
 function loginAtStartup() {
@@ -360,10 +374,26 @@ async function openTabsAndScrape() {
     chrome.tabs.remove(tab.id, () => {
       console.log("Tab closed after scraping all properties");
     });
+
+    //send email request to Firestore and prices from local storage
+    chrome.storage.local.get('prices', (result) => {
+      const user = auth.currentUser;
+      if (user) {
+        const requestData = {
+          sendEmail: true,
+          price: result.prices || {}, // Set to 0 or any default value
+          email: user.email || '',
+        };
+        updateSendEmailRequest(user.uid, requestData);
+      } else {
+        console.warn("⚠️ No authenticated user found to send email request.");
+      }
+    });
+
   });
 }
 
-// Listen for the extension icon click to start scraping
+// Listen for the extension icon click to start scraping and send email request
 chrome.action.onClicked.addListener(() => {
   openTabsAndScrape();
 });
@@ -399,3 +429,5 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 // <------------------------------------------------------------------------------------------------>
+
+//<--------------------------------------End of background.js-------------------------------------------------->

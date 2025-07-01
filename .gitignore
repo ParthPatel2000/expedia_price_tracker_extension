@@ -28,5 +28,6 @@ Thumbs.db
 # unnecessary firebase logs
 firebase-debug.log
 pglite-debug.log
+firebase.json
 
 

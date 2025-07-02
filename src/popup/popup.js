@@ -98,6 +98,21 @@ document.getElementById('propertiesBody').addEventListener('click', (event) => {
   }
 });
 
+
+//save email from the popup to the storage
+document.getElementById('saveEmailBtn').addEventListener('click', () => {
+  const email = document.getElementById('userEmailInput').value;
+  chrome.storage.local.set({ notificationEmail: email }, () => {
+    console.log("Email saved:", email);
+  });
+});
+
+// Load saved email on popup open
+chrome.storage.local.get('notificationEmail', (result) => {
+  const email = result.notificationEmail || '';
+  document.getElementById('userEmailInput').value = email;
+});
+
 // Toggle views
 function showPricesView() {
   document.getElementById('pricesView').style.display = 'block';

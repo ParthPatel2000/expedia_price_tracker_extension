@@ -173,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     signOut(auth)
       .then(() => {
         console.log("👋 User signed out successfully.");
-        chrome.storage.local.remove(['propertyLinks', 'prices'], () => {
+        chrome.storage.local.remove(['propertyLinks', 'prices', 'isPrimed', 'notificationEmail'], () => {
           console.log("✅ Cleared propertyLinks from local storage.");
         });
         // Optionally sign in anonymously again
@@ -195,17 +195,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Function to update the sendEmail request document in Firestore
 async function updateSendEmailRequest(userId, requestData) {
   const requestRef = doc(db, "users", userId, "emailRequests", "send");
-
   const user = auth.currentUser;
-  const email = user ? user.email : '';
+
+  let email = '';
+
+  // Wrap chrome.storage.local.get in a promise
+  const getFromStorage = (key) => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(key, (result) => {
+        resolve(result[key]);
+      });
+    });
+  };
+
+  const storedEmail = await getFromStorage('notificationEmail');
+
   if (!user) {
-    console.warn("⚠️ No authenticated user found to update email request.");
-    return;
+    if (!storedEmail) {
+      console.warn("⚠️ No email found to update sendEmail request.");
+      return;
+    }
+    email = storedEmail;
+  } else {
+    // Authenticated: use storedEmail if it exists, otherwise fallback to user.email
+    email = storedEmail || user.email;
   }
+
   await setDoc(requestRef, {
     sendEmail: requestData.sendEmail || false,
     prices: requestData.prices || 0,
-    email: email,
+    email,
     updatedAt: new Date(),
     ...requestData
   }, { merge: true });
@@ -213,10 +232,18 @@ async function updateSendEmailRequest(userId, requestData) {
   console.log(`✅ Updated sendEmail request doc for user ${userId}`);
 }
 
+
 // Function to send Prices data to email request from Firestore
 async function sendEmailRequest() {
 
   const { prices } = await chrome.storage.local.get('prices');
+  await chrome.storage.local.get('isPrimed', (result) => {
+    if (!result.isPrimed) {
+      primeSendEmailRequest();
+      chrome.storage.local.set({ isPrimed: true });
+    }
+  });
+
   const requestData = {
     sendEmail: true,
     prices: prices || {}, // Set to 0 or any default value
@@ -225,6 +252,18 @@ async function sendEmailRequest() {
   if (user) {
     updateSendEmailRequest(user.uid, requestData);
   }
+}
+
+async function primeSendEmailRequest() {
+  const user = auth.currentUser;
+  // Prepare the request data
+  const requestData = {
+    sendEmail: false, // Initially set to false
+    prices: {}, // Prices will be filled later
+  };
+
+  // Update Firestore with the request data
+  updateSendEmailRequest(user.uid, requestData);
 }
 
 
@@ -376,20 +415,7 @@ async function openTabsAndScrape() {
     });
 
     //send email request to Firestore and prices from local storage
-    chrome.storage.local.get('prices', (result) => {
-      const user = auth.currentUser;
-      if (user) {
-        const requestData = {
-          sendEmail: true,
-          price: result.prices || {}, // Set to 0 or any default value
-          email: user.email || '',
-        };
-        updateSendEmailRequest(user.uid, requestData);
-      } else {
-        console.warn("⚠️ No authenticated user found to send email request.");
-      }
-    });
-
+    sendEmailRequest();
   });
 }
 

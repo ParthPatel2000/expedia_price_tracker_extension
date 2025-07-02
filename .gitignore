@@ -30,4 +30,9 @@ firebase-debug.log
 pglite-debug.log
 firebase.json
 
+# Firebase functions logs
+functions/node_modules/
+functions/lib/
+
+
 

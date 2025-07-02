@@ -204,7 +204,7 @@ async function updateSendEmailRequest(userId, requestData) {
   }
   await setDoc(requestRef, {
     sendEmail: requestData.sendEmail || false,
-    price: requestData.price || 0,
+    prices: requestData.prices || 0,
     email: email,
     updatedAt: new Date(),
     ...requestData
@@ -216,10 +216,10 @@ async function updateSendEmailRequest(userId, requestData) {
 // Function to send Prices data to email request from Firestore
 async function sendEmailRequest() {
 
-  const prices = await chrome.storage.local.get('prices');
+  const { prices } = await chrome.storage.local.get('prices');
   const requestData = {
     sendEmail: true,
-    price: prices || {}, // Set to 0 or any default value
+    prices: prices || {}, // Set to 0 or any default value
   };
   const user = auth.currentUser;
   if (user) {

@@ -44,20 +44,72 @@ function loadPrices() {
   });
 }
 
+// Render property links in the popup
+function renderProperties(properties) {
+  const tbody = document.getElementById('propertiesBody');
+  tbody.innerHTML = ''; // clear previous
+
+  if (!properties || properties.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2">No properties found.</td></tr>';
+    return;
+  }
+
+  properties.forEach(prop => {
+    const tr = document.createElement('tr');
+    const nameTd = document.createElement('td');
+    nameTd.textContent = prop.name;
+    const actionTd = document.createElement('td');
+    actionTd.innerHTML = `<button class="remove-btn" data-url="${prop.url}">Remove</button>`;
+    tr.appendChild(nameTd);
+    tr.appendChild(actionTd);
+    tbody.appendChild(tr);
+  });
+}
+
+// Load properties from chrome storage
+function loadProperties() {
+  chrome.storage.local.get('propertyLinks', (result) => {
+    renderProperties(result.propertyLinks || []);
+  });
+}
+
+//Remove property link 
+document.getElementById('propertiesBody').addEventListener('click', (event) => {
+  if (event.target.classList.contains('remove-btn')) {
+    const url = event.target.getAttribute('data-url');
+    chrome.storage.local.get('propertyLinks', (result) => {
+      const updatedLinks = result.propertyLinks.filter(link => link.url !== url);
+      chrome.storage.local.set({ propertyLinks: updatedLinks }, () => {
+        renderProperties(updatedLinks);
+      });
+    });
+  }
+});
+
 // Toggle views
 function showPricesView() {
   document.getElementById('pricesView').style.display = 'block';
   document.getElementById('settingsView').style.display = 'none';
+  document.getElementById('propertiesView').style.display = 'none';
   loadPrices();
 }
 
 function showSettingsView() {
   document.getElementById('pricesView').style.display = 'none';
+  document.getElementById('propertiesView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'block';
   chrome.storage.local.get('authState', (result) => {
     updateAuthUI(result.authState);
   });
   clearStatusMsg();
+}
+
+function showPropertiesView() {
+  document.getElementById('pricesView').style.display = 'none';
+  document.getElementById('settingsView').style.display = 'none';
+  document.getElementById('propertiesView').style.display = 'block';
+  loadProperties();
+  document.getElementById('add-link').style.display = 'block'; // Show add link button
 }
 
 // Check authentication state and update UI
@@ -78,6 +130,8 @@ function updateAuthUI(authState) {
   }
 }
 
+
+//function that keeps the ui updated
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local') {
     if (changes.authState) {
@@ -92,13 +146,22 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (changes.propertyLinks) {
       console.log("🔄 Property links changed");
     }
+
+    if (changes.propertyLinks) {
+      loadProperties(); // re-render properties in the popup
+    }
+
   }
 });
 
+//listen for propertyview button click
+document.getElementById('propertiesBtn').addEventListener('click', () => {
+  showPropertiesView();
+});
 
 //listen for sendEmailRequest button click
 document.getElementById('sendEmailBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'sendEmailRequest'});
+  chrome.runtime.sendMessage({ action: 'sendEmailRequest' });
 });
 
 // Load background tab toggle state
@@ -181,6 +244,7 @@ document.getElementById('saveDelayBtn').addEventListener('click', () => {
 // Event listeners for buttons
 document.getElementById('settingsBtn').addEventListener('click', showSettingsView);
 document.getElementById('backBtn').addEventListener('click', showPricesView);
+document.getElementById('backToSettings').addEventListener('click', showSettingsView);
 document.getElementById('add-link').addEventListener('click', addCurrentExpediaLink);
 
 

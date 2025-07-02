@@ -167,13 +167,14 @@
     </div>
 
     <!-- User Email Input -->
-      <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-        <button id="sendEmailBtn" style="padding: 4px 8px;">Send Notification Email </button>
-      </div>
+    <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+      <button id="sendEmailBtn" style="padding: 4px 8px;">Send Notification Email </button>
+    </div>
 
     <!-- Navigation -->
     <div style="margin-bottom: 12px;">
       <button id="backBtn">🔙 Back</button>
+      <button id="propertiesBtn">📂 Saved Properties</button>
     </div>
 
     <!-- User Info -->
@@ -182,6 +183,24 @@
     <!-- Status Message -->
     <div id="statusMsg" style="margin-top: 8px; font-size: 13px;"></div>
 
+  </div>
+
+  <div id="propertiesView">
+    <button id="backToSettings">🔙 Back</button>
+    <table>
+      <caption>Saved Properties</caption>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="propertiesBody">
+        <tr>
+          <td colspan="2">Loading...</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
 

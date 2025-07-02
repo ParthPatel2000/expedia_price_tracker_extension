@@ -254,6 +254,10 @@ async function sendEmailRequest() {
   }
 }
 
+// Function to prime the sendEmail request document
+// This is called once to set up the initial request structure as firebase trigger
+// only works when the document is updated
+// This is to ensure that the document exists before the user clicks the Send Email button
 async function primeSendEmailRequest() {
   const user = auth.currentUser;
   // Prepare the request data

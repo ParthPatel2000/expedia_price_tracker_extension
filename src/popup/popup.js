@@ -73,14 +73,26 @@ function loadProperties() {
   });
 }
 
-//Remove property link 
+//Remove property link from the list
+// This function is called when the remove button is clicked
 document.getElementById('propertiesBody').addEventListener('click', (event) => {
   if (event.target.classList.contains('remove-btn')) {
     const url = event.target.getAttribute('data-url');
+    let propertyName = '';
     chrome.storage.local.get('propertyLinks', (result) => {
+      const property = result.propertyLinks.find(link => link.url === url);
+      propertyName = property ? property.name : '';
       const updatedLinks = result.propertyLinks.filter(link => link.url !== url);
       chrome.storage.local.set({ propertyLinks: updatedLinks }, () => {
         renderProperties(updatedLinks);
+      });
+    });
+    //also remove the price data for this property
+    chrome.storage.local.get('prices', (result) => {
+      const updatedPrices = { ...result.prices };
+      delete updatedPrices[propertyName];
+      chrome.storage.local.set({ prices: updatedPrices }, () => {
+        loadPrices();
       });
     });
   }

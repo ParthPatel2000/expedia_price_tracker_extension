@@ -37,5 +37,5 @@ functions/expedia-price-tracker-firebase-adminsdk-fbsvc-18f579e443.json
 functions/delete_all_send_email_request_in_firestore.js
 
 
-
+*.zip
 

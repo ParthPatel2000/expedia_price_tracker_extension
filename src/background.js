@@ -1,13 +1,5 @@
 // background.js
 
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-// importScripts(
-//   '../../firebase/firebase-app-compat.js',
-//   '../../firebase/firebase-auth-compat.js',
-//   '../../firebase/firebase-firestore-compat.js'
-// );
-
-
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithCredential, linkWithCredential, signOut } from 'firebase/auth/web-extension';
 import { getFirestore, collection, doc, setDoc, getDoc } from 'firebase/firestore';
@@ -41,11 +33,16 @@ function syncPropertyLinksToFirestore() {
   });
 }
 
+
+//cannot remove this listener as it is used to sync property links 
+// after the user removes a property link from the popup
+// Listen for messages from popup or content scripts to sync property links
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'syncPropertyLinks') {
     syncPropertyLinksToFirestore();
   }
 });
+
 
 // Function to download property links from Firestore to Chrome storage
 function downloadPropertyLinksFromFirestore() {
@@ -67,8 +64,7 @@ function downloadPropertyLinksFromFirestore() {
   });
 }
 
-
-
+// we will keep this listner but only remove the button from the popup
 // Listen for messages from popup or content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'downloadPropertyLinks') {

@@ -44,6 +44,7 @@ function loadPrices() {
   });
 }
 
+//<-property links management->
 // Render property links in the popup
 function renderProperties(properties) {
   const tbody = document.getElementById('propertiesBody');
@@ -87,6 +88,8 @@ document.getElementById('propertiesBody').addEventListener('click', (event) => {
         renderProperties(updatedLinks);
       });
     });
+    // sync the updated property links to Firestore
+    chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
     //also remove the price data for this property
     chrome.storage.local.get('prices', (result) => {
       const updatedPrices = { ...result.prices };
@@ -98,12 +101,13 @@ document.getElementById('propertiesBody').addEventListener('click', (event) => {
   }
 });
 
+//<-property links management end->
 
 //save email from the popup to the storage
 document.getElementById('saveEmailBtn').addEventListener('click', () => {
   const email = document.getElementById('userEmailInput').value;
   chrome.storage.local.set({ notificationEmail: email }, () => {
-    console.log("Email saved:", email);
+    showStatusMsg(`✅ Email saved: ${email}`, false);
   });
 });
 
@@ -125,9 +129,22 @@ function showSettingsView() {
   document.getElementById('pricesView').style.display = 'none';
   document.getElementById('propertiesView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'block';
+  // Load auth state and update UI
   chrome.storage.local.get('authState', (result) => {
     updateAuthUI(result.authState);
   });
+
+  // Show dev-only elements in development mode
+  if (process.env.NODE_ENV === 'development') {
+    document.querySelectorAll('.dev-only').forEach(el => {
+      el.style.display = 'block'; // or 'inline-block', as needed
+    });
+  } else {
+    // Optionally remove them in production to avoid unused DOM elements
+    document.querySelectorAll('.dev-only').forEach(el => el.remove());
+  }
+
+
   clearStatusMsg();
 }
 
@@ -171,7 +188,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     }
 
     if (changes.propertyLinks) {
-      console.log("🔄 Property links changed");
+      statusMsg = document.getElementById('statusText');
+      statusMsg.textContent = "Property links updated. Reloading...";
     }
 
     if (changes.propertyLinks) {
@@ -216,7 +234,7 @@ function addCurrentExpediaLink() {
     const url = currentTab.url;
 
     if (!url.includes("expedia.com/Hotel-Search")) {
-      console.warn("❌ Not an Expedia Hotel Search URL");
+      showStatusMsg("❌ Not an Expedia Hotel Search URL", true);
       return;
     }
 
@@ -226,10 +244,10 @@ function addCurrentExpediaLink() {
     chrome.storage.local.get({ propertyLinks: [] }, (result) => {
       const existing = result.propertyLinks || [];
 
-      // Avoid duplicates by checking URL
-      const alreadyExists = existing.some(p => p.url === url);
+      // Avoid duplicates by checking name
+      const alreadyExists = existing.some(p => p.name === displayName);
       if (alreadyExists) {
-        console.log("⚠️ Property already saved.");
+        showStatusMsg(`⚠️ Property "${displayName}" already tracked.`, true);
         return;
       }
 
@@ -241,7 +259,7 @@ function addCurrentExpediaLink() {
       const updated = [...existing, newEntry];
 
       chrome.storage.local.set({ propertyLinks: updated }, () => {
-        console.log(`✅ Saved: ${displayName}`);
+        showStatusMsg(`✅ Saved: ${displayName}`);
       });
 
       // Notify background script to sync links to Firestore
@@ -260,7 +278,7 @@ document.getElementById('saveDelayBtn').addEventListener('click', () => {
   const delay = parseInt(document.getElementById('delayInput').value);
   if (!isNaN(delay) && delay > 0) {
     chrome.storage.local.set({ pageDelay: delay }, () => {
-      console.log(`✅ Page delay saved: ${delay} sec`);
+      showStatusMsg(`✅ Page delay saved: ${delay} sec`, false);
     });
   } else {
     alert("Please enter a valid number greater than 0.");
@@ -302,13 +320,19 @@ document.getElementById('downloadFromCloudBtn').addEventListener('click', () => 
 
 // Status message helper functions
 function showStatusMsg(msg, isError = false) {
-  const status = document.getElementById('statusMsg');
+  const status = document.getElementById('statusText');
   status.textContent = msg;
   status.className = isError ? 'error' : '';
+  status.style.color = isError ? 'red' : 'black';
+  status.style.display = 'block';
+  setTimeout(() => {
+    clearStatusMsg();
+  }, 3000); // Clear after 3 seconds
+
 }
 
 function clearStatusMsg() {
-  const status = document.getElementById('statusMsg');
+  const status = document.getElementById('statusText');
   status.textContent = '';
   status.className = '';
 }

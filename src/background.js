@@ -382,16 +382,6 @@ async function openTabsAndScrape() {
     chrome.tabs.remove(tab.id, () => {
       console.log("Tab closed after scraping all properties");
     });
-
-    //send email request if the dailyScrapeNotificationSwitch is enabled
-    chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
-      if (result.dailyScrapeNotificationEnabled) {
-        log("📧 Sending email request for scraped prices");
-        sendEmailRequest();
-      } else {
-        log("📧 Daily scrape notification is disabled, not sending email request.");
-      }
-    });
   });
 }
 
@@ -434,17 +424,35 @@ chrome.runtime.onMessage.addListener((message) => {
 
 // <--------------------------------------Alarm System------------------------------------------------------>
 // Schedule a daily scrape at a specific time
-chrome.alarms.onAlarm.addListener((alarm) => {
+chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'dailyScrape') {
     log('⏰ Daily scrape alarm triggered');
-    //trigger the scraping function only if the dailyScrapeSwitch is enabled
-    chrome.storage.local.get('dailyScrapeEnabled', (result) => {
-      if (result.dailyScrapeEnabled) {
-        openTabsAndScrape(); // Your existing scraping function
-      }
+
+    const { dailyScrapeEnabled, dailyScrapeNotificationEnabled } = await new Promise((resolve) => {
+      chrome.storage.local.get(['dailyScrapeEnabled', 'dailyScrapeNotificationEnabled'], resolve);
     });
+
+    if (!dailyScrapeEnabled) {
+      log("🚫 Daily scrape is disabled, skipping.");
+      return;
+    }
+
+    try {
+      await openTabsAndScrape(); // 🔄 Wait until all scraping is done
+
+      if (dailyScrapeNotificationEnabled) {
+        log("📧 Sending email request for scraped prices");
+        await sendEmailRequest(); // ⬅️ Email only after scrape finishes
+      } else {
+        log("📧 Daily scrape notification is disabled, not sending email request.");
+      }
+
+    } catch (err) {
+      console.error("❌ Error during daily scrape or email:", err);
+    }
   }
 });
+
 
 
 function scheduleDailyScrape(hour = 11, minute = 10) {

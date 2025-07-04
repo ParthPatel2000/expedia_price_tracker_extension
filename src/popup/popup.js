@@ -325,6 +325,12 @@ if (process.env.NODE_ENV === 'development') {
 
 }
 
+// Listen for messages from background script to show status messages
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'showStatusMsg') {
+    showStatusMsg(message.msg, message.isError);
+  }
+});
 
 
 // Status message helper functions

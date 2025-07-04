@@ -34,8 +34,14 @@ function syncPropertyLinksToFirestore() {
     const propertyLinks = result.propertyLinks || [];
 
     setDoc(doc(db, "users", user.uid), { propertyLinks }, { merge: true })
-      .then(() => log("✅ Synced propertyLinks to Firestore"))
-      .catch(err => error("❌ Sync error:", err));
+      .then(() => {
+        log("✅ Synced propertyLinks to Firestore");
+        chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "✅ Synced property links to Firestore.", isError: false });
+      })
+      .catch(err => {
+        error("❌ Sync error:", err);
+        chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "❌ Sync error: " + err.message, isError: true });
+      });
   });
 }
 
@@ -62,11 +68,14 @@ function downloadPropertyLinksFromFirestore() {
 
     chrome.storage.local.set({ propertyLinks: cloudLinks }, () => {
       log("✅ Downloaded and saved propertyLinks from Firestore to local storage.");
+      chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "✅ Downloaded property links from Firestore.", isError: false });
     });
   }).catch(err => {
     chrome.storage.local.set({ propertyLinks: [] }, () => {
       warn("⚠️ No propertyLinks found in Firestore. Defaulting to empty array.");
+      chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "⚠️ No property links found in Firestore.", isError: true });
     });
+
   });
 }
 
@@ -459,6 +468,8 @@ chrome.runtime.onMessage.addListener((message) => {
     });
   }
 });
+
+
 // <------------------------------------------------------------------------------------------------>
 
 //<--------------------------------------End of background.js-------------------------------------------------->

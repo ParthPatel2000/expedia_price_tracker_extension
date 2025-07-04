@@ -36,11 +36,11 @@ function syncPropertyLinksToFirestore() {
     setDoc(doc(db, "users", user.uid), { propertyLinks }, { merge: true })
       .then(() => {
         log("✅ Synced propertyLinks to Firestore");
-        chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "✅ Synced property links to Firestore.", isError: false });
+        showStatusMsg("✅ Synced property links to Firestore.", false);
       })
       .catch(err => {
         error("❌ Sync error:", err);
-        chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "❌ Sync error: " + err.message, isError: true });
+        showStatusMsg("❌ Sync error: " + err.message, true);
       });
   });
 }
@@ -68,12 +68,12 @@ function downloadPropertyLinksFromFirestore() {
 
     chrome.storage.local.set({ propertyLinks: cloudLinks }, () => {
       log("✅ Downloaded and saved propertyLinks from Firestore to local storage.");
-      chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "✅ Downloaded property links from Firestore.", isError: false });
+      showStatusMsg("✅ Downloaded property links from Firestore.", false);
     });
   }).catch(err => {
     chrome.storage.local.set({ propertyLinks: [] }, () => {
       warn("⚠️ No propertyLinks found in Firestore. Defaulting to empty array.");
-      chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "⚠️ No property links found in Firestore.", isError: true });
+      showStatusMsg("⚠️ No property links found in Firestore.", true);
     });
 
   });
@@ -202,94 +202,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // <--------------------------------------End of Firebase Setup-------------------------------------------------->
 
 //<--------------------------------------Notification System ------------------------------------------------------>
-
-// Function to update the sendEmail request document in Firestore
-async function updateSendEmailRequest(userId, requestData) {
-  const requestRef = doc(db, "users", userId, "emailRequests", "send");
+// Function to send email request document in Firestore
+async function sendEmailRequest(requestData) {
   const user = auth.currentUser;
+  if (!user) {
+    warn("❌ No authenticated user found.");
+    return;
+  }
 
-  let email = '';
-
-  // Wrap chrome.storage.local.get in a promise
   const getFromStorage = (key) => {
     return new Promise((resolve) => {
-      chrome.storage.local.get(key, (result) => {
-        resolve(result[key]);
-      });
+      chrome.storage.local.get(key, (result) => resolve(result[key]));
     });
   };
 
   const storedEmail = await getFromStorage('notificationEmail');
+  const email = storedEmail || user.email;
 
-  if (!user) {
-    if (!storedEmail) {
-      warn("⚠️ No email found to update sendEmail request.");
-      return;
-    }
-    email = storedEmail;
-  } else {
-    // Authenticated: use storedEmail if it exists, otherwise fallback to user.email
-    email = storedEmail || user.email;
+  if (!email) {
+    warn("⚠️ No email found to send request.");
+    return;
   }
 
-  await setDoc(requestRef, {
-    sendEmail: requestData.sendEmail || false,
-    prices: requestData.prices || 0,
+  const requestRef = doc(db, "users", user.uid, "emailRequests", new Date().toISOString()); // Use timestamped doc ID
+
+  const finalData = {
+    prices: requestData.prices || {},
     email,
-    updatedAt: new Date(),
-    ...requestData
-  }, { merge: true });
-
-  log(`✅ Updated sendEmail request doc for user ${userId}`);
-}
-
-
-// Function to send Prices data to email request from Firestore
-async function sendEmailRequest() {
-
-  const { prices } = await chrome.storage.local.get('prices');
-  await chrome.storage.local.get('isPrimed', (result) => {
-    if (!result.isPrimed) {
-      primeSendEmailRequest();
-      chrome.storage.local.set({ isPrimed: true });
-    }
-  });
-
-  const requestData = {
-    sendEmail: true,
-    prices: prices || {}, // Set to 0 or any default value
-  };
-  const user = auth.currentUser;
-  if (user) {
-    updateSendEmailRequest(user.uid, requestData);
-  }
-}
-
-// Function to prime the sendEmail request document
-// This is called once to set up the initial request structure as firebase trigger
-// only works when the document is updated
-// This is to ensure that the document exists before the user clicks the Send Email button
-async function primeSendEmailRequest() {
-  const user = auth.currentUser;
-  const requestData = {
-    sendEmail: false, // Initially set to false
-    prices: {}, // Prices will be filled later
+    createdAt: new Date(),
   };
 
-  // Update Firestore with the request data
-  updateSendEmailRequest(user.uid, requestData);
+  await setDoc(requestRef, finalData);
+  log(`✅ Created sendEmail request doc for user ${user.uid}`);
 }
+
 
 
 // Listen for Send Email button click in popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'sendEmailRequest') {
-    const user = auth.currentUser;
-    if (user) {
-      sendEmailRequest(user.uid, message.data);
-    }
+    sendEmailRequest(message.requestData);
   }
 });
+
 
 // <--------------------------------------Startup Sequence------------------------------------------------------>
 function loginAtStartup() {
@@ -428,8 +383,15 @@ async function openTabsAndScrape() {
       console.log("Tab closed after scraping all properties");
     });
 
-    //send email request to Firestore and prices from local storage
-    sendEmailRequest();
+    //send email request if the dailyScrapeNotificationSwitch is enabled
+    chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
+      if (result.dailyScrapeNotificationEnabled) {
+        log("📧 Sending email request for scraped prices");
+        sendEmailRequest();
+      } else {
+        log("📧 Daily scrape notification is disabled, not sending email request.");
+      }
+    });
   });
 }
 
@@ -468,6 +430,58 @@ chrome.runtime.onMessage.addListener((message) => {
     });
   }
 });
+
+
+// <--------------------------------------Alarm System------------------------------------------------------>
+// Schedule a daily scrape at a specific time
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'dailyScrape') {
+    log('⏰ Daily scrape alarm triggered');
+    //trigger the scraping function only if the dailyScrapeSwitch is enabled
+    chrome.storage.local.get('dailyScrapeEnabled', (result) => {
+      if (result.dailyScrapeEnabled) {
+        openTabsAndScrape(); // Your existing scraping function
+      }
+    });
+  }
+});
+
+
+function scheduleDailyScrape(hour = 11, minute = 10) {
+  chrome.storage.local.set({ dailyScrapeTime: { hour, minute } }, () => {
+    log(`✅ Saved daily scrape time at ${hour}:${minute < 10 ? '0' : ''}${minute} in local storage`);
+  });
+
+  chrome.alarms.clear('dailyScrape', () => {
+    const now = new Date();
+    let when = new Date();
+
+    when.setHours(hour, minute, 0, 0);
+    if (when <= now) {
+      // If the time already passed today, schedule for tomorrow
+      when.setDate(when.getDate() + 1);
+    }
+
+    chrome.alarms.create('dailyScrape', { when: when.getTime(), periodInMinutes: 24 * 60 });
+    log(`Scheduled daily scrape alarm at ${hour}:${minute < 10 ? '0' : ''}${minute}`);
+    showStatusMsg(`Scheduled daily scrape at ${hour}:${minute < 10 ? '0' : ''}${minute}`, false);
+  });
+}
+
+//listen for the scheduleDailyScrape message from popup.js
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'scheduleDailyScrape') {
+    const { hour, minute } = message;
+    scheduleDailyScrape(hour, minute);
+  }
+});
+
+
+//wrapper function for the showStatusMsg function in popup.js
+// This function sends a message to the popup to show a status message
+function showStatusMsg(msg, isError = false) {
+  chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError });
+}
 
 
 // <------------------------------------------------------------------------------------------------>

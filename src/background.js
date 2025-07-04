@@ -1,16 +1,14 @@
 // background.js
-
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-// importScripts(
-//   '../../firebase/firebase-app-compat.js',
-//   '../../firebase/firebase-auth-compat.js',
-//   '../../firebase/firebase-firestore-compat.js'
-// );
-
-
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithCredential, linkWithCredential, signOut } from 'firebase/auth/web-extension';
 import { getFirestore, collection, doc, setDoc, getDoc } from 'firebase/firestore';
+
+const isDev = process.env.NODE_ENV === 'development';
+
+const log = (...args) => isDev && console.log(...args);
+const warn = (...args) => isDev && console.warn(...args);
+const error = (...args) => isDev && console.error(...args);
+
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -36,16 +34,27 @@ function syncPropertyLinksToFirestore() {
     const propertyLinks = result.propertyLinks || [];
 
     setDoc(doc(db, "users", user.uid), { propertyLinks }, { merge: true })
-      .then(() => console.log("✅ Synced propertyLinks to Firestore"))
-      .catch(err => console.error("❌ Sync error:", err));
+      .then(() => {
+        log("✅ Synced propertyLinks to Firestore");
+        chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "✅ Synced property links to Firestore.", isError: false });
+      })
+      .catch(err => {
+        error("❌ Sync error:", err);
+        chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "❌ Sync error: " + err.message, isError: true });
+      });
   });
 }
 
+
+//cannot remove this listener as it is used to sync property links 
+// after the user removes a property link from the popup
+// Listen for messages from popup or content scripts to sync property links
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'syncPropertyLinks') {
     syncPropertyLinksToFirestore();
   }
 });
+
 
 // Function to download property links from Firestore to Chrome storage
 function downloadPropertyLinksFromFirestore() {
@@ -58,15 +67,19 @@ function downloadPropertyLinksFromFirestore() {
     const cloudLinks = data.propertyLinks || [];
 
     chrome.storage.local.set({ propertyLinks: cloudLinks }, () => {
-      console.log("✅ Downloaded and saved propertyLinks from Firestore to local storage.");
+      log("✅ Downloaded and saved propertyLinks from Firestore to local storage.");
+      chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "✅ Downloaded property links from Firestore.", isError: false });
     });
   }).catch(err => {
     chrome.storage.local.set({ propertyLinks: [] }, () => {
-      console.warn("⚠️ No propertyLinks found in Firestore. Defaulting to empty array.");
+      warn("⚠️ No propertyLinks found in Firestore. Defaulting to empty array.");
+      chrome.runtime.sendMessage({ action: 'showStatusMsg', msg: "⚠️ No property links found in Firestore.", isError: true });
     });
+
   });
 }
 
+// we will keep this listner but only remove the button from the popup
 // Listen for messages from popup or content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'downloadPropertyLinks') {
@@ -80,12 +93,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function authStateChange(newState) {
   if (newState === 'anonymous') {
     chrome.storage.local.set({ authState: 'anonymous' }, () => {
-      console.log("✅ Authentication state set to anonymous");
+      log("✅ Authentication state set to anonymous");
     });
 
   } else if (newState === 'google') {
     chrome.storage.local.set({ authState: 'google' }, () => {
-      console.log("✅ Authentication state set to Google");
+      log("✅ Authentication state set to Google");
     });
 
   }
@@ -108,7 +121,7 @@ function launchGoogleOAuth() {
   const clientId = "541814014300-4fhosq4k2rihu2qjrds1sut1cq8r012q.apps.googleusercontent.com";
   const redirectUri = chrome.identity.getRedirectURL();
 
-  console.log("Redirect URI your extension uses:", redirectUri);
+  log("Redirect URI your extension uses:", redirectUri);
 
   const authUrl =
     `https://accounts.google.com/o/oauth2/v2/auth` +
@@ -122,7 +135,7 @@ function launchGoogleOAuth() {
     { url: authUrl, interactive: true },
     (redirectUrl) => {
       if (chrome.runtime.lastError || !redirectUrl) {
-        console.error("❌ Auth failed or canceled:", chrome.runtime.lastError);
+        error("❌ Auth failed or canceled:", chrome.runtime.lastError);
         return;
       }
 
@@ -130,7 +143,7 @@ function launchGoogleOAuth() {
       const m = redirectUrl.match(/access_token=([^&]+)/);
       if (m && m[1]) {
         const accessToken = m[1];
-        console.log("✅ Google Access Token:", accessToken);
+        log("✅ Google Access Token:", accessToken);
 
         const credential = GoogleAuthProvider.credential(null, accessToken);
         const currentUser = auth.currentUser;
@@ -138,26 +151,26 @@ function launchGoogleOAuth() {
         // 🔄 Upgrade anonymous account to Google account
         linkWithCredential(currentUser, credential)
           .then((userCredential) => {
-            console.log("🔄 Anonymous account upgraded to Google:", userCredential.user);
+            log("🔄 Anonymous account upgraded to Google:", userCredential.user);
           })
           .catch(error => {
             if (error.code === 'auth/credential-already-in-use') {
-              console.warn("⚠️ Google account already linked to another user. Switching to signInWithCredential.");
+              warn("⚠️ Google account already linked to another user. Switching to signInWithCredential.");
               signInWithCredential(auth, credential)
                 .then(userCredential => {
-                  console.log("✅ Signed in with Google:", userCredential.user);
+                  log("✅ Signed in with Google:", userCredential.user);
                   downloadPropertyLinksFromFirestore(); // Load property links after sign-in
                 })
                 .catch(err => {
-                  console.error("❌ Error signing in:", err);
+                  error("❌ Error signing in:", err);
                 });
             } else {
-              console.error("❌ linkWithCredential failed:", error);
+              error("❌ linkWithCredential failed:", error);
             }
           });
 
       } else {
-        console.error("❌ No access token found in redirect URL");
+        error("❌ No access token found in redirect URL");
       }
     }
   );
@@ -170,25 +183,113 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'logoutUser') {
     signOut(auth)
       .then(() => {
-        console.log("👋 User signed out successfully.");
-        chrome.storage.local.remove(['propertyLinks', 'prices'], () => {
-          console.log("✅ Cleared propertyLinks from local storage.");
+        log("👋 User signed out successfully.");
+        chrome.storage.local.remove(['propertyLinks', 'prices', 'isPrimed', 'notificationEmail'], () => {
+          log("✅ Cleared propertyLinks from local storage.");
         });
         // Optionally sign in anonymously again
         return signInAnonymously(auth);
       })
       .then(() => {
-        console.log("🔄 Reverted to anonymous user after logout.");
+        log("🔄 Reverted to anonymous user after logout.");
       })
       .catch((error) => {
-        console.error("❌ Sign-out error:", error);
+        error("❌ Sign-out error:", error);
       });
   }
 });
 
+// <--------------------------------------End of Firebase Setup-------------------------------------------------->
+
+//<--------------------------------------Notification System ------------------------------------------------------>
+
+// Function to update the sendEmail request document in Firestore
+async function updateSendEmailRequest(userId, requestData) {
+  const requestRef = doc(db, "users", userId, "emailRequests", "send");
+  const user = auth.currentUser;
+
+  let email = '';
+
+  // Wrap chrome.storage.local.get in a promise
+  const getFromStorage = (key) => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(key, (result) => {
+        resolve(result[key]);
+      });
+    });
+  };
+
+  const storedEmail = await getFromStorage('notificationEmail');
+
+  if (!user) {
+    if (!storedEmail) {
+      warn("⚠️ No email found to update sendEmail request.");
+      return;
+    }
+    email = storedEmail;
+  } else {
+    // Authenticated: use storedEmail if it exists, otherwise fallback to user.email
+    email = storedEmail || user.email;
+  }
+
+  await setDoc(requestRef, {
+    sendEmail: requestData.sendEmail || false,
+    prices: requestData.prices || 0,
+    email,
+    updatedAt: new Date(),
+    ...requestData
+  }, { merge: true });
+
+  log(`✅ Updated sendEmail request doc for user ${userId}`);
+}
 
 
+// Function to send Prices data to email request from Firestore
+async function sendEmailRequest() {
 
+  const { prices } = await chrome.storage.local.get('prices');
+  await chrome.storage.local.get('isPrimed', (result) => {
+    if (!result.isPrimed) {
+      primeSendEmailRequest();
+      chrome.storage.local.set({ isPrimed: true });
+    }
+  });
+
+  const requestData = {
+    sendEmail: true,
+    prices: prices || {}, // Set to 0 or any default value
+  };
+  const user = auth.currentUser;
+  if (user) {
+    updateSendEmailRequest(user.uid, requestData);
+  }
+}
+
+// Function to prime the sendEmail request document
+// This is called once to set up the initial request structure as firebase trigger
+// only works when the document is updated
+// This is to ensure that the document exists before the user clicks the Send Email button
+async function primeSendEmailRequest() {
+  const user = auth.currentUser;
+  const requestData = {
+    sendEmail: false, // Initially set to false
+    prices: {}, // Prices will be filled later
+  };
+
+  // Update Firestore with the request data
+  updateSendEmailRequest(user.uid, requestData);
+}
+
+
+// Listen for Send Email button click in popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'sendEmailRequest') {
+    const user = auth.currentUser;
+    if (user) {
+      sendEmailRequest(user.uid, message.data);
+    }
+  }
+});
 
 // <--------------------------------------Startup Sequence------------------------------------------------------>
 function loginAtStartup() {
@@ -201,19 +302,19 @@ function loginAtStartup() {
       const isFirstTime = user.metadata.creationTime === user.metadata.lastSignInTime;
 
       if (isFirstTime && user.isAnonymous) {
-        console.log("🆕 New anonymous user:", user.uid);
+        log("🆕 New anonymous user:", user.uid);
       } else {
-        console.log("🔁 Returning user:", user.isAnonymous ? 'anonymous' : user.email);
+        log("🔁 Returning user:", user.isAnonymous ? 'anonymous' : user.email);
       }
     } else {
       // No user? Sign in anonymously
       try {
         const cred = await signInAnonymously(auth);
-        console.log("✅ Anonymous login successful:", cred.user.uid);
+        log("✅ Anonymous login successful:", cred.user.uid);
         authStateChange('anonymous');
         chrome.storage.local.set({ loginAtStartup: true });
       } catch (err) {
-        console.error("❌ Anonymous login failed:", err);
+        error("❌ Anonymous login failed:", err);
       }
     }
   });
@@ -237,9 +338,9 @@ let props = []; // Global variable to hold properties loaded from storage
 chrome.storage.local.get('propertyLinks', (result) => {
   if (Array.isArray(result.propertyLinks)) {
     props = result.propertyLinks;
-    console.log("✅ Loaded props from storage:", props);
+    log("✅ Loaded props from storage:", props);
   } else {
-    console.warn("⚠️ No propertyLinks found in storage.");
+    warn("⚠️ No propertyLinks found in storage.");
   }
 });
 
@@ -248,9 +349,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     chrome.storage.local.get('propertyLinks', (result) => {
       if (Array.isArray(result.propertyLinks)) {
         props = result.propertyLinks;
-        console.log("✅ Loaded props from storage:", props);
+        log("✅ Loaded props from storage:", props);
       } else {
-        console.warn("⚠️ No propertyLinks found in storage.");
+        warn("⚠️ No propertyLinks found in storage.");
       }
     });
   }
@@ -326,10 +427,13 @@ async function openTabsAndScrape() {
     chrome.tabs.remove(tab.id, () => {
       console.log("Tab closed after scraping all properties");
     });
+
+    //send email request to Firestore and prices from local storage
+    sendEmailRequest();
   });
 }
 
-// Listen for the extension icon click to start scraping
+// Listen for the extension icon click to start scraping and send email request
 chrome.action.onClicked.addListener(() => {
   openTabsAndScrape();
 });
@@ -343,7 +447,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // main scraping and storage logic
 chrome.runtime.onMessage.addListener((message) => {
-  console.log(`📩 Received price for ${message.hotelName}: ${message.price}`);
+  log(`📩 Received price for ${message.hotelName}: ${message.price}`);
 
   if (message.action === 'startScraping') {
     openTabsAndScrape();
@@ -359,9 +463,13 @@ chrome.runtime.onMessage.addListener((message) => {
       };
 
       chrome.storage.local.set({ prices }, () => {
-        console.log(`💾 Stored/updated price for ${message.hotelName}:`, prices[message.hotelName]);
+        log(`💾 Stored/updated price for ${message.hotelName}:`, prices[message.hotelName]);
       });
     });
   }
 });
+
+
 // <------------------------------------------------------------------------------------------------>
+
+//<--------------------------------------End of background.js-------------------------------------------------->

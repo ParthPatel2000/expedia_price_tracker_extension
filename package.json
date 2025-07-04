@@ -4,7 +4,8 @@
   "main": "background.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack --mode production"
+    "dev": "webpack --mode development --watch",
+    "build": "webpack --mode production --watch"
   },
   "repository": {
     "type": "git",
@@ -20,6 +21,7 @@
   "description": "",
   "devDependencies": {
     "copy-webpack-plugin": "^13.0.0",
+    "dotenv-webpack": "^8.1.1",
     "webpack": "^5.99.9",
     "webpack-cli": "^6.0.1"
   },

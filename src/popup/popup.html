@@ -1,14 +1,79 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Expedia Prices</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       width: 320px;
       padding: 10px;
+    }
+
+    .section-block {
+      margin-bottom: 12px;
+    }
+
+    .button-group button {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+    input[type="email"],
+    input[type="number"] {
+      padding: 4px;
+      font-size: 13px;
+    }
+
+    #delayInput {
+      width: 60px;
+      padding: 4px;
+    }
+
+    #saveDelayBtn,
+    #saveEmailBtn,
+    #sendEmailBtn {
+      padding: 4px 8px;
+      font-size: 13px;
+    }
+
+    #googleLoginBtn,
+    #logoutBtn,
+    #add-link,
+    #refreshBtn,
+    #backBtn,
+    #propertiesBtn,
+    #backToSettings {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+
+    section.view-section {
+      margin-top: 10px;
+    }
+
+    .section-block {
+      margin-bottom: 12px;
+    }
+
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    input,
+    select {
+      padding: 5px;
+      font-size: 13px;
     }
 
     table {
@@ -30,11 +95,6 @@
     caption {
       font-weight: bold;
       margin-bottom: 10px;
-    }
-
-    button {
-      margin-top: 10px;
-      padding: 6px 12px;
     }
 
     .switch {
@@ -82,31 +142,28 @@
       transform: translateX(14px);
     }
 
-    /* Settings button small style */
     #settingsBtn {
       font-size: 12px;
       padding: 4px 8px;
       margin-top: 6px;
-      cursor: pointer;
       float: right;
       background-color: #eee;
       border: 1px solid #ccc;
       border-radius: 3px;
-    }
-
-    /* Hide sections by default */
-    #settingsView {
-      display: none;
+      cursor: pointer;
     }
 
     #statusMsg {
       margin-top: 8px;
-      font-size: 12px;
-      color: green;
+      font-size: 13px;
     }
 
     #statusMsg.error {
       color: red;
+    }
+
+    .dev-only {
+      display: none;
     }
   </style>
 </head>
@@ -114,9 +171,10 @@
 <body>
 
   <!-- Prices View -->
-  <div id="pricesView">
+  <section id="pricesView" class="view-section">
     <table>
-      <caption>Hotel Prices
+      <caption>
+        Hotel Prices
         <button id="settingsBtn" title="Settings">⚙️ Settings</button>
       </caption>
       <thead>
@@ -133,53 +191,93 @@
       </tbody>
     </table>
 
-    <label class="switch">
-      <input type="checkbox" id="backgroundTabSwitch">
-      <span class="slider"></span>
-    </label>
-    <span> Open tabs in background</span>
+    <div class="section-block"
+      style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <label class="switch">
+          <input type="checkbox" id="backgroundTabSwitch" />
+          <span class="slider"></span>
+        </label>
+        <span>Open tabs in background</span>
+      </div>
+      <button id="refreshBtn">Refresh Prices</button>
+    </div>
 
-    <button id="refreshBtn">Refresh Prices</button>
-  </div>
+
+    <div class="section-block">
+    </div>
+  </section>
 
   <!-- Settings View -->
-  <div id="settingsView">
+  <section id="settingsView" class="view-section" style="display: none;">
     <h3>Settings</h3>
 
-    <!-- Property Actions -->
-    <div style="margin-bottom: 12px;">
+    <!-- Add Property -->
+    <div class="section-block">
       <button id="add-link">➕ Add This Property</button>
+    </div>
+
+    <div class="section-block dev-only button-group">
+      <!-- Dev-only Buttons -->
       <button id="syncFirestoreBtn">⬆️ Sync to Cloud</button>
       <button id="downloadFromCloudBtn">⬇️ Sync from Cloud</button>
     </div>
 
-    <!-- Authentication Actions -->
-    <div style="margin-bottom: 12px;">
+    <!-- Auth Buttons -->
+    <div class="section-block button-group">
       <button id="googleLoginBtn">🔐 Sign in with Google</button>
-      <button id="logoutBtn" style="margin-left: 8px;">🚪 Logout</button>
+      <button id="logoutBtn">🚪 Logout</button>
     </div>
 
-    <!-- Settings -->
-    <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-      <label for="delayInput" style="font-size: 14px;">Page Load Delay (sec):</label>
-      <input type="number" id="delayInput" min="1" value="6" style="width: 60px; padding: 4px;">
-      <button id="saveDelayBtn" style="padding: 4px 8px;">Save</button>
+    <!-- Delay Setting -->
+    <div class="section-block" style="display: flex; align-items: center; gap: 8px;">
+      <label for="delayInput">Page Load Delay (sec):</label>
+      <input type="number" id="delayInput" min="1" value="6" style="width: 60px;">
+      <button id="saveDelayBtn">Save</button>
     </div>
 
+    <!-- User Email Input -->
+    <div class="section-block" style="display: flex; align-items: center; gap: 8px;">
+      <input type="email" id="userEmailInput" placeholder="Enter your email" style="flex: 1;">
+      <button id="saveEmailBtn">Save Email</button>
+      <button class="dev-only" id="sendEmailBtn">Send Notification Email</button>
+    </div>
 
     <!-- Navigation -->
-    <div style="margin-bottom: 12px;">
+    <div class="section-block button-group">
       <button id="backBtn">🔙 Back</button>
+      <button id="propertiesBtn">📂 Saved Properties</button>
     </div>
 
     <!-- User Info -->
-    <div id="userInfo" style="margin-top:10px; font-size:14px; color: #333;"></div>
+    <div id="userInfo" style="margin-top: 10px; font-size: 14px; color: #333;"></div>
 
     <!-- Status Message -->
-    <div id="statusMsg" style="margin-top: 8px; font-size: 13px;"></div>
+    <div id="statusMsg">
+      <span id="statusText"></span>
+    </div>
+  </section>
 
-  </div>
-
+  <!-- Properties View -->
+  <section id="propertiesView" class="view-section" style="display: none;">
+    <div class="section-block">
+      <button id="backToSettings">🔙 Back</button>
+    </div>
+    <table>
+      <caption>Saved Properties</caption>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="propertiesBody">
+        <tr>
+          <td colspan="2">Loading...</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
 
   <script src="popup.js"></script>
 </body>

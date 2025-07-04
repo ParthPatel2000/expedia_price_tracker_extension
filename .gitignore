@@ -24,3 +24,15 @@ Thumbs.db
 
 # System files
 *.swp
+
+# unnecessary firebase logs
+firebase-debug.log
+pglite-debug.log
+firebase.json
+
+# Firebase functions logs
+functions/node_modules/
+functions/lib/
+
+
+

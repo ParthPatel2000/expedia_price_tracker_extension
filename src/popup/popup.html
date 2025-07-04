@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Expedia Prices</title>
   <style>
     body {
@@ -49,6 +50,51 @@
       font-size: 13px;
     }
 
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 20px;
+      margin-left: 10px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      border-radius: 50%;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+    }
+
+    input:checked+.slider {
+      background-color: #2196F3;
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(14px);
+    }
 
     section.view-section {
       margin-top: 10px;
@@ -247,6 +293,7 @@
     <div class="section-block button-group">
       <button id="backBtn">🔙 Back</button>
       <button id="propertiesBtn">📂 Saved Properties</button>
+      <button id="dailyScrapeBtn">🗓️ Daily Scrape</button>
     </div>
 
     <!-- User Info -->
@@ -257,6 +304,38 @@
       <span id="statusText"></span>
     </div>
   </section>
+
+  <!-- Daily Scrape Schedule -->
+  <section id="dailyScrapeView" class="view-section" style="display: none;">
+    <h3>Daily Scrape Schedule</h3>
+    <div class="section-block"
+      style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+      <label for="dailyScrapeTime">Daily Scrape Time:</label>
+      <input type="time" id="dailyScrapeTime" value="11:00" style="width: 100px;">
+      <!-- Enable Daily Scrape -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <label for="dailyScrapeSwitch" style="font-size: 14px;">Enable Daily Scrape</label>
+        <label class="switch">
+          <input type="checkbox" id="dailyScrapeSwitch" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Email Notifications -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <label for="dailyScrapeNotificationSwitch" style="font-size: 14px;">Send Email Notifications</label>
+        <label class="switch">
+          <input type="checkbox" id="dailyScrapeNotificationSwitch" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <button id="scheduleScrapeBtn">Schedule</button>
+      <button id="cancelScrapeBtn">Cancel</button>
+    </div>
+  </section>
+
+
 
   <!-- Properties View -->
   <section id="propertiesView" class="view-section" style="display: none;">

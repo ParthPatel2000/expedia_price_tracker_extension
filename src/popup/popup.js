@@ -1,5 +1,7 @@
 // popup.js
 
+import { DocumentReference } from "firebase/firestore";
+
 
 // Format timestamp into a readable string
 function formatDate(dateStr) {
@@ -117,17 +119,20 @@ chrome.storage.local.get('notificationEmail', (result) => {
   document.getElementById('userEmailInput').value = email;
 });
 
+//--------------------View Management--------------------
 // Toggle views
 function showPricesView() {
-  document.getElementById('pricesView').style.display = 'block';
   document.getElementById('settingsView').style.display = 'none';
   document.getElementById('propertiesView').style.display = 'none';
+  document.getElementById('dailyScrapeView').style.display = 'none';
+  document.getElementById('pricesView').style.display = 'block';
   loadPrices();
 }
 
 function showSettingsView() {
   document.getElementById('pricesView').style.display = 'none';
   document.getElementById('propertiesView').style.display = 'none';
+  document.getElementById('dailyScrapeView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'block';
   // Load auth state and update UI
   chrome.storage.local.get('authState', (result) => {
@@ -151,10 +156,27 @@ function showSettingsView() {
 function showPropertiesView() {
   document.getElementById('pricesView').style.display = 'none';
   document.getElementById('settingsView').style.display = 'none';
+  document.getElementById('dailyScrapeView').style.display = 'none';
   document.getElementById('propertiesView').style.display = 'block';
   loadProperties();
   document.getElementById('add-link').style.display = 'block'; // Show add link button
 }
+
+function showDailyScrapeView() {
+  document.getElementById('pricesView').style.display = 'none';
+  document.getElementById('settingsView').style.display = 'none';
+  document.getElementById('propertiesView').style.display = 'none';
+  document.getElementById('dailyScrapeView').style.display = 'block';
+  chrome.storage.local.get('dailyScrapeEnabled', (result) => {
+    document.getElementById('dailyScrapeSwitch').checked = result.dailyScrapeEnabled !== undefined ? result.dailyScrapeEnabled : false;
+  });
+  chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
+    document.getElementById('dailyScrapeNotificationSwitch').checked = result.dailyScrapeNotificationEnabled !== undefined ? result.dailyScrapeNotificationEnabled : false;
+  });
+  loadDailyScrapeView(); // Load saved daily scrape time
+}
+
+//--------------------View Management End--------------------
 
 // Check authentication state and update UI
 
@@ -196,6 +218,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       loadProperties(); // re-render properties in the popup
     }
 
+    if (changes.dailyScrapeTime) {
+      loadDailyScrapeView(); // re-render daily scrape view in the popup
+    }
   }
 });
 
@@ -282,12 +307,57 @@ document.getElementById('saveDelayBtn').addEventListener('click', () => {
 });
 
 
+// Daily scrape scheduling
+document.getElementById('scheduleScrapeBtn').addEventListener('click', () => {
+  const timeInput = document.getElementById('dailyScrapeTime').value;
+  if (!timeInput) return;
+
+  const [hour, minute] = timeInput.split(':').map(Number);
+
+  chrome.runtime.sendMessage({
+    action: 'scheduleDailyScrape',
+    hour,
+    minute
+  });
+
+  showStatusMsg(`📅 Daily scrape scheduled for ${hour}:${minute.toString().padStart(2, '0')}`, false);
+});
+
+document.getElementById('cancelScrapeBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'cancelDailyScrape' });
+  showStatusMsg("🚫 Daily scrape schedule canceled.", true);
+});
+
+function loadDailyScrapeView() {
+  chrome.storage.local.get('dailyScrapeTime', (result) => {
+    const { dailyScrapeTime } = result;
+    if (dailyScrapeTime) {
+
+      const hour = String(dailyScrapeTime.hour).padStart(2, '0');
+      const minute = String(dailyScrapeTime.minute).padStart(2, '0');
+      document.getElementById('dailyScrapeTime').value = `${hour}:${minute}`;
+    }
+  });
+}
+
 // Event listeners for buttons
 document.getElementById('settingsBtn').addEventListener('click', showSettingsView);
 document.getElementById('backBtn').addEventListener('click', showPricesView);
 document.getElementById('backToSettings').addEventListener('click', showSettingsView);
 document.getElementById('add-link').addEventListener('click', addCurrentExpediaLink);
+document.getElementById('dailyScrapeBtn').addEventListener('click', showDailyScrapeView);
 
+//LISTENER FOR THE dailyScrapeSwitch BUTTON AND SAVE THE STATE IN LOCAL STORAGE FOR THE VISUAL INDICATOR
+document.getElementById('dailyScrapeSwitch').addEventListener('change', function () {
+  const isChecked = this.checked;
+  chrome.storage.local.set({ dailyScrapeEnabled: isChecked });
+});
+
+//listner for dailyScrapeNotificationSwitch switch and save the state in local storage for the visual indicator
+document.getElementById('dailyScrapeNotificationSwitch').addEventListener('change', function () {
+  const isChecked = this.checked;
+  chrome.storage.local.set({ dailyScrapeNotificationEnabled: isChecked });
+});
 
 document.getElementById('refreshBtn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'startScraping' });

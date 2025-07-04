@@ -88,7 +88,7 @@ document.getElementById('propertiesBody').addEventListener('click', (event) => {
         renderProperties(updatedLinks);
       });
     });
-    // sync the updated property links to Firestore
+    // sync the updated property links to Firestore now that a link is removed
     chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
     //also remove the price data for this property
     chrome.storage.local.get('prices', (result) => {
@@ -204,10 +204,6 @@ document.getElementById('propertiesBtn').addEventListener('click', () => {
   showPropertiesView();
 });
 
-//listen for sendEmailRequest button click
-document.getElementById('sendEmailBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'sendEmailRequest' });
-});
 
 // Load background tab toggle state
 function loadBackgroundTabSetting() {
@@ -262,7 +258,7 @@ function addCurrentExpediaLink() {
         showStatusMsg(`✅ Saved: ${displayName}`);
       });
 
-      // Notify background script to sync links to Firestore
+      // Notify background script to sync links to Firestore now that a new link is added
       chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
     });
   });
@@ -308,15 +304,28 @@ document.getElementById('googleLoginBtn').addEventListener('click', () => {
   document.getElementById('userInfo').textContent = 'Opening Google sign-in...';
 });
 
+// dev only: Sync Firestore with property links button listner
+// This listner is not required  is not required in production
 // Sync Firestore with property links button
-document.getElementById('syncFirestoreBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
-});
+if (process.env.NODE_ENV === 'development') {
+  document.getElementById('syncFirestoreBtn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
+  });
 
-// download property links from Firestore button
-document.getElementById('downloadFromCloudBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'downloadPropertyLinks' });
-});
+  // download property links from Firestore button
+  document.getElementById('downloadFromCloudBtn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'downloadPropertyLinks' });
+  });
+
+
+  //listen for sendEmailRequest button click
+  document.getElementById('sendEmailBtn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'sendEmailRequest' });
+  });
+
+}
+
+
 
 // Status message helper functions
 function showStatusMsg(msg, isError = false) {

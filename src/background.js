@@ -484,6 +484,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+//listen for the  cancelScrapeBtn to cancel the alarm
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'cancelScrapeBtn') {
+    chrome.alarms.clear('dailyScrape', () => {
+      log("✅ Daily scrape alarm cancelled.");
+      showStatusMsg("✅ Daily scrape alarm cancelled.", false);
+    });
+  }
+});
+
 
 //wrapper function for the showStatusMsg function in popup.js
 // This function sends a message to the popup to show a status message

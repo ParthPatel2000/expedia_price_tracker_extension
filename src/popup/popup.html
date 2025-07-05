@@ -13,7 +13,11 @@
     }
 
     .section-block {
-      margin-bottom: 12px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 10px;
+      /* some spacing below button */
+      margin-bottom: 15px;
+      /* space before the table */
     }
 
     .button-group button {
@@ -199,14 +203,56 @@
       cursor: pointer;
     }
 
-    #statusMsg {
-      margin-top: 8px;
-      font-size: 13px;
+    .statusMsg {
+      margin-top: 10px;
+      /* spacing from above section */
+      padding: 6px 10px;
+      display: block;
+      width: 100%;
     }
 
-    #statusMsg.error {
-      color: red;
+    .statusText {
+      display: none;
+      font-size: 14px;
+      font-weight: 500;
+      color: black;
+      /* default, changed in JS on error */
+      white-space: pre-wrap;
+      /* wrap long messages */
     }
+
+    #pricesView .section-block {
+      border-bottom: none;
+      padding-bottom: 0;
+      margin-bottom: 0;
+    }
+
+    .scrollable-table {
+      max-height: 200px;
+      /* or whatever you prefer */
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      /* optional, just for structure */
+      margin-top: 10px;
+    }
+
+    .invalid-button {
+      background-color: #ff4d4d;
+      border-color: #cc0000;
+      color: white;
+    }
+
+    .warning-button {
+      background-color: #ffe066;
+      border-color: #ffcc00;
+      color: #333;
+    }
+
+    .table-container {
+      width: 100%;
+    }
+
+
 
     .dev-only {
       display: none;
@@ -218,24 +264,27 @@
 
   <!-- Prices View -->
   <section id="pricesView" class="view-section">
-    <table>
-      <caption>
-        Hotel Prices
-        <button id="settingsBtn" title="Settings">⚙️ Settings</button>
-      </caption>
-      <thead>
-        <tr>
-          <th>Hotel</th>
-          <th>Price</th>
-          <th>Last Updated</th>
-        </tr>
-      </thead>
-      <tbody id="pricesBody">
-        <tr>
-          <td colspan="3">Loading...</td>
-        </tr>
-      </tbody>
-    </table>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="margin: 0;">Hotel Prices</h3>
+      <button id="settingsBtn" title="Settings">⚙️ Settings</button>
+    </div>
+
+    <div class="scrollable-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Hotel</th>
+            <th>Price</th>
+            <th>Last Updated</th>
+          </tr>
+        </thead>
+        <tbody id="pricesBody">
+          <tr>
+            <td colspan="3">Loading...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <div class="section-block"
       style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
@@ -248,20 +297,11 @@
       </div>
       <button id="refreshBtn">Refresh Prices</button>
     </div>
-
-
-    <div class="section-block">
-    </div>
   </section>
 
   <!-- Settings View -->
   <section id="settingsView" class="view-section" style="display: none;">
     <h3>Settings</h3>
-
-    <!-- Add Property -->
-    <div class="section-block">
-      <button id="add-link">➕ Add This Property</button>
-    </div>
 
     <div class="section-block dev-only button-group">
       <!-- Dev-only Buttons -->
@@ -291,29 +331,34 @@
 
     <!-- Navigation -->
     <div class="section-block button-group">
-      <button id="backBtn">🔙 Back</button>
       <button id="propertiesBtn">📂 Saved Properties</button>
       <button id="dailyScrapeBtn">🗓️ Daily Scrape</button>
+    </div>
+    <div>
+      <button id="backBtn">🔙 Back</button>
     </div>
 
     <!-- User Info -->
     <div id="userInfo" style="margin-top: 10px; font-size: 14px; color: #333;"></div>
 
     <!-- Status Message -->
-    <div id="statusMsg">
-      <span id="statusText"></span>
+    <div class="statusMsg">
+      <span class="statusText" style="display: none;"></span>
     </div>
   </section>
-
-  <!-- Daily Scrape Schedule -->
   <section id="dailyScrapeView" class="view-section" style="display: none;">
     <h3>Daily Scrape Schedule</h3>
-    <div class="section-block"
-      style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+
+    <!-- Block 1: Time Input -->
+    <div class="section-block" style="display: flex; align-items: center; gap: 10px;">
       <label for="dailyScrapeTime">Daily Scrape Time:</label>
       <input type="time" id="dailyScrapeTime" value="11:00" style="width: 100px;">
+    </div>
+
+    <!-- Block 2: Enable Scrape -->
+    <div class="section-block" style="display: flex; flex-direction: column; gap: 10px;">
       <!-- Enable Daily Scrape -->
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
         <label for="dailyScrapeSwitch" style="font-size: 14px;">Enable Daily Scrape</label>
         <label class="switch">
           <input type="checkbox" id="dailyScrapeSwitch" />
@@ -321,41 +366,59 @@
         </label>
       </div>
 
-      <!-- Email Notifications -->
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+      <!-- Send Email Notifications -->
+      <div style="display: flex; align-items: center; justify-content: space-between;">
         <label for="dailyScrapeNotificationSwitch" style="font-size: 14px;">Send Email Notifications</label>
         <label class="switch">
           <input type="checkbox" id="dailyScrapeNotificationSwitch" />
           <span class="slider"></span>
         </label>
       </div>
+    </div>
 
+    <!-- Block 4: Schedule/Cancel -->
+    <div class="section-block button-group">
       <button id="scheduleScrapeBtn">Schedule</button>
       <button id="cancelScrapeBtn">Cancel</button>
+    </div>
+
+    <!-- Block 5: Back Button -->
+    <div class="section-block button-group">
+      <button class="backToSettings">🔙 Back</button>
+    </div>
+
+    <!-- Block 6: Status -->
+    <div class="statusMsg" style="margin-bottom: 0;">
+      <span class="statusText" style="display: none;"></span>
     </div>
   </section>
 
 
 
+
   <!-- Properties View -->
   <section id="propertiesView" class="view-section" style="display: none;">
-    <div class="section-block">
-      <button id="backToSettings">🔙 Back</button>
+    <div class="section-block" style="display: flex; justify-content: space-between; align-items: center;">
+      <button class="backToSettings">🔙 Back</button>
+      <button id="add-link">➕ Add This Property</button>
     </div>
-    <table>
-      <caption>Saved Properties</caption>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="propertiesBody">
-        <tr>
-          <td colspan="2">Loading...</td>
-        </tr>
-      </tbody>
-    </table>
+
+    <h3>Saved Properties</h3>
+    <div class="scrollable-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="propertiesBody">
+          <tr>
+            <td colspan="2">Loading...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <script src="popup.js"></script>

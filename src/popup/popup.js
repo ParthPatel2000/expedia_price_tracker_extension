@@ -47,6 +47,8 @@ function loadPrices() {
 }
 
 //<-property links management->
+
+
 // Render property links in the popup
 function renderProperties(properties) {
   const tbody = document.getElementById('propertiesBody');
@@ -73,6 +75,52 @@ function renderProperties(properties) {
 function loadProperties() {
   chrome.storage.local.get('propertyLinks', (result) => {
     renderProperties(result.propertyLinks || []);
+  });
+}
+
+
+// adding the current page to the storage.
+function addCurrentExpediaLink() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const currentTab = tabs[0];
+    const url = currentTab.url;
+
+    if (!url.includes("expedia.com/Hotel-Search")) {
+      showStatusMsg("❌ Not an Expedia Hotel Search URL", true);
+      paintAddLinkButton("error");
+      toastNotification("❌ Not an Expedia Hotel Search URL", 'error');
+      return;
+    }
+
+    const hotelNameParam = new URL(url).searchParams.get("hotelName");
+    const displayName = hotelNameParam ? decodeURIComponent(hotelNameParam.replace(/\+/g, ' ')) : 'Unnamed Hotel';
+
+    chrome.storage.local.get({ propertyLinks: [] }, (result) => {
+      const existing = result.propertyLinks || [];
+
+      // Avoid duplicates by checking name
+      const alreadyExists = existing.some(p => p.name === displayName);
+      if (alreadyExists) {
+        showStatusMsg(`⚠️ Property "${displayName}" already tracked.`, true);
+        paintAddLinkButton("warning");
+        toastNotification(`⚠️ Property "${displayName}" already tracked.`, 'warning');
+        return;
+      }
+
+      const newEntry = {
+        name: displayName,
+        url: url
+      };
+
+      const updated = [...existing, newEntry];
+
+      chrome.storage.local.set({ propertyLinks: updated }, () => {
+        showStatusMsg(`✅ Saved: ${displayName}`);
+      });
+
+      // Notify background script to sync links to Firestore now that a new link is added
+      chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
+    });
   });
 }
 
@@ -103,6 +151,36 @@ document.getElementById('propertiesBody').addEventListener('click', (event) => {
   }
 });
 
+
+function paintAddLinkButton(type = "error", duration = 1500) {
+  const btn = document.getElementById('add-link');
+
+  // Clear any previous state
+  btn.classList.remove('invalid-button', 'warning-button');
+
+  if (type === "error") {
+    btn.classList.add('invalid-button');
+  } else if (type === "warning") {
+    btn.classList.add('warning-button');
+  }
+
+  // Revert after timeout
+  setTimeout(() => {
+    btn.classList.remove('invalid-button', 'warning-button');
+  }, duration);
+}
+
+function toastNotification(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.className = `toast ${type}`;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.remove();
+  }, 3000);
+}
+
+
 //<-property links management end->
 
 //save email from the popup to the storage
@@ -118,6 +196,7 @@ chrome.storage.local.get('notificationEmail', (result) => {
   const email = result.notificationEmail || '';
   document.getElementById('userEmailInput').value = email;
 });
+
 
 //--------------------View Management--------------------
 // Toggle views
@@ -210,11 +289,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     }
 
     if (changes.propertyLinks) {
-      statusMsg = document.getElementById('statusText');
-      statusMsg.textContent = "Property links updated. Reloading...";
-    }
-
-    if (changes.propertyLinks) {
       loadProperties(); // re-render properties in the popup
     }
 
@@ -248,46 +322,6 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 });
 
 
-// adding the current page to the storage.
-function addCurrentExpediaLink() {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const currentTab = tabs[0];
-    const url = currentTab.url;
-
-    if (!url.includes("expedia.com/Hotel-Search")) {
-      showStatusMsg("❌ Not an Expedia Hotel Search URL", true);
-      return;
-    }
-
-    const hotelNameParam = new URL(url).searchParams.get("hotelName");
-    const displayName = hotelNameParam ? decodeURIComponent(hotelNameParam.replace(/\+/g, ' ')) : 'Unnamed Hotel';
-
-    chrome.storage.local.get({ propertyLinks: [] }, (result) => {
-      const existing = result.propertyLinks || [];
-
-      // Avoid duplicates by checking name
-      const alreadyExists = existing.some(p => p.name === displayName);
-      if (alreadyExists) {
-        showStatusMsg(`⚠️ Property "${displayName}" already tracked.`, true);
-        return;
-      }
-
-      const newEntry = {
-        name: displayName,
-        url: url
-      };
-
-      const updated = [...existing, newEntry];
-
-      chrome.storage.local.set({ propertyLinks: updated }, () => {
-        showStatusMsg(`✅ Saved: ${displayName}`);
-      });
-
-      // Notify background script to sync links to Firestore now that a new link is added
-      chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
-    });
-  });
-}
 
 // Load saved delay on popup open
 chrome.storage.local.get({ pageDelay: 6 }, (result) => {
@@ -343,9 +377,12 @@ function loadDailyScrapeView() {
 // Event listeners for buttons
 document.getElementById('settingsBtn').addEventListener('click', showSettingsView);
 document.getElementById('backBtn').addEventListener('click', showPricesView);
-document.getElementById('backToSettings').addEventListener('click', showSettingsView);
 document.getElementById('add-link').addEventListener('click', addCurrentExpediaLink);
 document.getElementById('dailyScrapeBtn').addEventListener('click', showDailyScrapeView);
+document.querySelectorAll('.backToSettings').forEach(btn => {
+  btn.addEventListener('click', showSettingsView);
+});
+
 
 //LISTENER FOR THE dailyScrapeSwitch BUTTON AND SAVE THE STATE IN LOCAL STORAGE FOR THE VISUAL INDICATOR
 document.getElementById('dailyScrapeSwitch').addEventListener('change', function () {
@@ -405,22 +442,34 @@ chrome.runtime.onMessage.addListener((message) => {
 
 // Status message helper functions
 function showStatusMsg(msg, isError = false) {
-  const status = document.getElementById('statusText');
-  status.textContent = msg;
-  status.className = isError ? 'error' : '';
-  status.style.color = isError ? 'red' : 'black';
-  status.style.display = 'block';
-  setTimeout(() => {
-    clearStatusMsg();
-  }, 3000); // Clear after 3 seconds
+  const statusElems = document.querySelectorAll('.statusText');
 
+  statusElems.forEach((el) => {
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.color = isError ? 'red' : 'black';
+
+    // Add error class if needed, but don't remove base class
+    if (isError) {
+      el.classList.add('error');
+    } else {
+      el.classList.remove('error');
+    }
+  });
+
+  setTimeout(clearStatusMsg, 3000);
 }
 
 function clearStatusMsg() {
-  const status = document.getElementById('statusText');
-  status.textContent = '';
-  status.className = '';
+  const statusElems = document.querySelectorAll('.statusText');
+
+  statusElems.forEach((el) => {
+    el.textContent = '';
+    el.style.display = 'none';
+    el.classList.remove('error');
+  });
 }
+
 
 //call the loginAtStartup function to check if the user is logged in
 

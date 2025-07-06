@@ -359,7 +359,7 @@ document.getElementById('scheduleScrapeBtn').addEventListener('click', () => {
 
 document.getElementById('cancelScrapeBtn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'cancelDailyScrape' });
-  showStatusMsg("🚫 Daily scrape schedule canceled.", true);
+  // showStatusMsg("🚫 Daily scrape schedule canceled.", true);
 });
 
 function loadDailyScrapeView() {

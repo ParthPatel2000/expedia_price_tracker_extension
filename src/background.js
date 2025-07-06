@@ -484,15 +484,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-//listen for the  cancelScrapeBtn to cancel the alarm
+//listen for the  cancelDailyScrape message to cancel the alarm
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'cancelScrapeBtn') {
-    chrome.alarms.clear('dailyScrape', () => {
-      log("✅ Daily scrape alarm cancelled.");
-      showStatusMsg("✅ Daily scrape alarm cancelled.", false);
+  if (message.action === 'cancelDailyScrape') {
+    chrome.alarms.get('dailyScrape', (alarm) => {
+      if (!alarm) {
+        showStatusMsg("⚠️ No daily scrape alarm exists.", true);
+        console.log("⚠️ No alarm named 'dailyScrape' found.");
+      } else {
+        chrome.alarms.clear('dailyScrape', () => {
+          // Recheck just to confirm it's gone
+          chrome.alarms.get('dailyScrape', (afterClear) => {
+            if (!afterClear) {
+              showStatusMsg("✅ Daily scrape alarm cancelled.", false);
+              console.log("✅ Alarm 'dailyScrape' cleared.");
+            } else {
+              showStatusMsg("❌ Failed to cancel daily scrape alarm.", true);
+              console.log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
+            }
+          });
+        });
+      }
     });
   }
 });
+
+
 
 
 //wrapper function for the showStatusMsg function in popup.js
@@ -500,8 +517,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function showStatusMsg(msg, isError = false) {
   chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError });
 }
-
-
-// <------------------------------------------------------------------------------------------------>
 
 //<--------------------------------------End of background.js-------------------------------------------------->

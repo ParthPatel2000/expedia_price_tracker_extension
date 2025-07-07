@@ -246,8 +246,8 @@ function showDailyScrapeView() {
   document.getElementById('settingsView').style.display = 'none';
   document.getElementById('propertiesView').style.display = 'none';
   document.getElementById('dailyScrapeView').style.display = 'block';
-  chrome.storage.local.get('dailyScrapeEnabled', (result) => {
-    document.getElementById('dailyScrapeSwitch').checked = result.dailyScrapeEnabled !== undefined ? result.dailyScrapeEnabled : false;
+  chrome.alarms.get('dailyScrape', (alarm) => {
+    document.getElementById('dailyScrapeSwitch').checked = !!alarm;
   });
   chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
     document.getElementById('dailyScrapeNotificationSwitch').checked = result.dailyScrapeNotificationEnabled !== undefined ? result.dailyScrapeNotificationEnabled : false;

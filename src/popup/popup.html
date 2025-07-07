@@ -301,6 +301,9 @@
 
   <!-- Settings View -->
   <section id="settingsView" class="view-section" style="display: none;">
+    <div class="section-block button-group">
+      <button id="backBtn">🔙 Back</button>
+    </div>
     <h3>Settings</h3>
 
     <div class="section-block dev-only button-group">
@@ -310,33 +313,36 @@
       <button id="sendTestEmailBtn">📧</button>
     </div>
 
-    <!-- Auth Buttons -->
-    <div class="section-block button-group">
-      <button id="googleLoginBtn">🔐 Sign in with Google</button>
-      <button id="logoutBtn">🚪 Logout</button>
+    <!-- Delay Setting + Email Input Section -->
+    <div class="section-block" style="display: flex; flex-direction: column; gap: 10px;">
+
+      <!-- Row 1: Delay Setting -->
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <label for="delayInput">Page Load Delay (sec):</label>
+        <input type="number" id="delayInput" min="1" value="6" style="width: 60px;">
+      </div>
+
+      <!-- Row 2: Email Input + Save Button -->
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <input type="email" id="userEmailInput" placeholder="Enter your email" style="flex: 1;">
+        <button id="saveEmailBtn">Save Email</button>
+      </div>
+
     </div>
 
-    <!-- Delay Setting -->
-    <div class="section-block" style="display: flex; align-items: center; gap: 8px;">
-      <label for="delayInput">Page Load Delay (sec):</label>
-      <input type="number" id="delayInput" min="1" value="6" style="width: 60px;">
-      <button id="saveDelayBtn">Save</button>
-    </div>
-
-    <!-- User Email Input -->
-    <div class="section-block" style="display: flex; align-items: center; gap: 8px;">
-      <input type="email" id="userEmailInput" placeholder="Enter your email" style="flex: 1;">
-      <button id="saveEmailBtn">Save Email</button>
-      <button class="dev-only" id="sendEmailBtn">Send Notification Email</button>
-    </div>
 
     <!-- Navigation -->
-    <div class="section-block button-group">
-      <button id="propertiesBtn">📂 Saved Properties</button>
-      <button id="dailyScrapeBtn">🗓️ Daily Scrape</button>
+    <div class="section-block button-group" style="display: flex; gap: 10px;">
+      <button id="propertiesBtn" style="flex: 1; min-width: 0;">📂 Saved Properties</button>
+      <button id="dailyScrapeBtn" style="flex: 1; min-width: 0;">🗓️ Daily Scrape</button>
     </div>
-    <div>
-      <button id="backBtn">🔙 Back</button>
+
+
+
+    <!-- Auth Buttons -->
+    <div class="section-block button-group" style="display: flex; gap: 10px;">
+      <button id="googleLoginBtn" style="flex: 1; min-width: 0;">🔐 Google</button>
+      <button id="logoutBtn" style="flex: 1; min-width: 0;">🚪 Logout</button>
     </div>
 
     <!-- User Info -->
@@ -347,7 +353,12 @@
       <span class="statusText" style="display: none;"></span>
     </div>
   </section>
+
   <section id="dailyScrapeView" class="view-section" style="display: none;">
+    <!-- Block 5: Back Button -->
+    <div class="section-block button-group">
+      <button class="backToSettings">🔙 Back</button>
+    </div>
     <h3>Daily Scrape Schedule</h3>
 
     <!-- Block 1: Time Input -->
@@ -377,10 +388,6 @@
       </div>
     </div>
 
-    <!-- Block 5: Back Button -->
-    <div class="section-block button-group">
-      <button class="backToSettings">🔙 Back</button>
-    </div>
 
     <!-- Block 6: Status -->
     <div class="statusMsg" style="margin-bottom: 0;">

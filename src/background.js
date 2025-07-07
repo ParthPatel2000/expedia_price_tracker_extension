@@ -224,7 +224,7 @@ async function sendEmailRequest(requestData) {
     return;
   }
 
-  const requestRef = doc(db, "users", user.uid, "emailRequests", new Date().toISOString()); // Use timestamped doc ID
+  const requestRef = doc(db, "users", user.uid, "emailRequests", "send"); // Use fixed doc ID
 
   const finalData = {
     prices: requestData.prices || {},
@@ -509,7 +509,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Dev Only 
 
+if (isDev) {
+  function testMail() {
+    const testData = {
+      prices: {
+        "Hotel A": { price: "$100", timestamp: new Date().toISOString() },
+        "Hotel B": { price: "$150", timestamp: new Date().toISOString() }
+      }
+    };
+    sendEmailRequest(testData);
+  }
+
+  // Listen for a test message to trigger email sending
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'testMail') {
+      testMail();
+      showStatusMsg("✅ Test email sent successfully.", false);
+    }
+  });
+  log("🔧 Dev mode enabled: Test email functionality is active.");
+}
 
 
 //wrapper function for the showStatusMsg function in popup.js

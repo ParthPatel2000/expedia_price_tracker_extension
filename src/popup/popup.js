@@ -444,6 +444,10 @@ if (process.env.NODE_ENV === 'development') {
     chrome.runtime.sendMessage({ action: 'sendEmailRequest' });
   });
 
+  document.getElementById('sendTestEmailBtn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'testMail' });
+  });
+
 }
 
 // Listen for messages from background script to show status messages

@@ -33,9 +33,9 @@ exports.sendEmailOnCreate = onDocumentCreated(
         });
 
         await transporter.sendMail({
-          from: `"Your App Name" <${EMAIL_USER.value()}>`,
+          from: `"Expedia Price Scraper" <${EMAIL_USER.value()}>`,
           to: recipient,
-          subject: "Your Hotel Prices",
+          subject: "Price Update for the Hotels",
           html: pricesToHtmlTable(prices),
         });
 

@@ -252,7 +252,15 @@ function showDailyScrapeView() {
   chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
     document.getElementById('dailyScrapeNotificationSwitch').checked = result.dailyScrapeNotificationEnabled !== undefined ? result.dailyScrapeNotificationEnabled : false;
   });
-  loadDailyScrapeView(); // Load saved daily scrape time
+  chrome.storage.local.get('dailyScrapeTime', (result) => {
+    const { dailyScrapeTime } = result;
+    if (dailyScrapeTime) {
+
+      const hour = String(dailyScrapeTime.hour).padStart(2, '0');
+      const minute = String(dailyScrapeTime.minute).padStart(2, '0');
+      document.getElementById('dailyScrapeTime').value = `${hour}:${minute}`;
+    }
+  });
 }
 
 //--------------------View Management End--------------------
@@ -292,9 +300,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       loadProperties(); // re-render properties in the popup
     }
 
-    if (changes.dailyScrapeTime) {
-      loadDailyScrapeView(); // re-render daily scrape view in the popup
-    }
   }
 });
 
@@ -341,11 +346,35 @@ document.getElementById('saveDelayBtn').addEventListener('click', () => {
 });
 
 
-// Daily scrape scheduling
-document.getElementById('scheduleScrapeBtn').addEventListener('click', () => {
-  const timeInput = document.getElementById('dailyScrapeTime').value;
-  if (!timeInput) return;
+document.getElementById('dailyScrapeSwitch').addEventListener('change', () => {
+  const isChecked = document.getElementById('dailyScrapeSwitch').checked;
 
+  if (isChecked) {
+    const timeInput = document.getElementById('dailyScrapeTime').value;
+    if (!timeInput) {
+      showStatusMsg('⛔ Select a time before enabling.', true);
+      document.getElementById('dailyScrapeSwitch').checked = false;
+      return;
+    }
+
+    const [hour, minute] = timeInput.split(':').map(Number);
+
+    chrome.runtime.sendMessage({
+      action: 'scheduleDailyScrape',
+      hour,
+      minute
+    });
+
+    showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`, false);
+
+  } else {
+    chrome.runtime.sendMessage({ action: 'cancelDailyScrape' });
+    showStatusMsg('🚫 Scrape canceled.', true);
+  }
+});
+
+document.getElementById('dailyScrapeTime').addEventListener('change', () => {
+  const timeInput = document.getElementById('dailyScrapeTime').value;
   const [hour, minute] = timeInput.split(':').map(Number);
 
   chrome.runtime.sendMessage({
@@ -353,26 +382,10 @@ document.getElementById('scheduleScrapeBtn').addEventListener('click', () => {
     hour,
     minute
   });
-
-  showStatusMsg(`📅 Daily scrape scheduled for ${hour}:${minute.toString().padStart(2, '0')}`, false);
+  showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`, false);
+  //change the state of the dailyScrapeSwitch to true
+  document.getElementById('dailyScrapeSwitch').checked = true;
 });
-
-document.getElementById('cancelScrapeBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'cancelDailyScrape' });
-  // showStatusMsg("🚫 Daily scrape schedule canceled.", true);
-});
-
-function loadDailyScrapeView() {
-  chrome.storage.local.get('dailyScrapeTime', (result) => {
-    const { dailyScrapeTime } = result;
-    if (dailyScrapeTime) {
-
-      const hour = String(dailyScrapeTime.hour).padStart(2, '0');
-      const minute = String(dailyScrapeTime.minute).padStart(2, '0');
-      document.getElementById('dailyScrapeTime').value = `${hour}:${minute}`;
-    }
-  });
-}
 
 // Event listeners for buttons
 document.getElementById('settingsBtn').addEventListener('click', showSettingsView);
@@ -394,6 +407,7 @@ document.getElementById('dailyScrapeSwitch').addEventListener('change', function
 document.getElementById('dailyScrapeNotificationSwitch').addEventListener('change', function () {
   const isChecked = this.checked;
   chrome.storage.local.set({ dailyScrapeNotificationEnabled: isChecked });
+  showStatusMsg(`Daily price notification ${isChecked ? 'enabled' : 'disabled'}`, false);
 });
 
 document.getElementById('refreshBtn').addEventListener('click', () => {

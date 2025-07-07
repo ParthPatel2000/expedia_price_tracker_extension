@@ -201,50 +201,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // <--------------------------------------End of Firebase Setup-------------------------------------------------->
 
-//<--------------------------------------Notification System ------------------------------------------------------>
-// Function to send email request document in Firestore
-async function sendEmailRequest(requestData) {
-  const user = auth.currentUser;
-  if (!user) {
-    warn("❌ No authenticated user found.");
-    return;
-  }
-
-  const getFromStorage = (key) => {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(key, (result) => resolve(result[key]));
-    });
-  };
-
-  const storedEmail = await getFromStorage('notificationEmail');
-  const email = storedEmail || user.email;
-
-  if (!email) {
-    warn("⚠️ No email found to send request.");
-    return;
-  }
-
-  const requestRef = doc(db, "users", user.uid, "emailRequests", "send"); // Use fixed doc ID
-
-  const finalData = {
-    prices: requestData.prices || {},
-    email,
-    createdAt: new Date(),
-  };
-
-  await setDoc(requestRef, finalData);
-  log(`✅ Created sendEmail request doc for user ${user.uid}`);
-}
-
-
-
-// Listen for Send Email button click in popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'sendEmailRequest') {
-    sendEmailRequest(message.requestData);
-  }
-});
-
 
 // <--------------------------------------Startup Sequence------------------------------------------------------>
 function loginAtStartup() {
@@ -422,27 +378,70 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 
+//<--------------------------------------Notification System ------------------------------------------------------>
+// Function to send email request document in Firestore
+async function sendEmailRequest(requestData) {
+  const user = auth.currentUser;
+  if (!user) {
+    warn("❌ No authenticated user found.");
+    return;
+  }
+
+  const getFromStorage = (key) => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(key, (result) => resolve(result[key]));
+    });
+  };
+
+  const storedEmail = await getFromStorage('notificationEmail');
+  const email = storedEmail || user.email;
+
+  if (!email) {
+    warn("⚠️ No email found to send request.");
+    return;
+  }
+
+  const requestRef = doc(db, "users", user.uid, "emailRequests", "send"); // Use fixed doc ID
+
+  const finalData = {
+    prices: requestData.prices || {},
+    email,
+    createdAt: new Date(),
+  };
+
+  await setDoc(requestRef, finalData);
+  log(`✅ Created sendEmail request doc for user ${user.uid}`);
+}
+
+
+
+// Listen for Send Email button click in popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'sendEmailRequest') {
+    sendEmailRequest(message.requestData);
+  }
+});
+
+
+
 // <--------------------------------------Alarm System------------------------------------------------------>
 // Schedule a daily scrape at a specific time
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'dailyScrape') {
     log('⏰ Daily scrape alarm triggered');
 
-    const { dailyScrapeEnabled, dailyScrapeNotificationEnabled } = await new Promise((resolve) => {
-      chrome.storage.local.get(['dailyScrapeEnabled', 'dailyScrapeNotificationEnabled'], resolve);
+    const { dailyScrapeNotificationEnabled } = await new Promise((resolve) => {
+      chrome.storage.local.get(['dailyScrapeNotificationEnabled'], resolve);
     });
-
-    if (!dailyScrapeEnabled) {
-      log("🚫 Daily scrape is disabled, skipping.");
-      return;
-    }
 
     try {
       await openTabsAndScrape(); // 🔄 Wait until all scraping is done
 
       if (dailyScrapeNotificationEnabled) {
         log("📧 Sending email request for scraped prices");
-        await sendEmailRequest(); // ⬅️ Email only after scrape finishes
+        chrome.storage.local.get({ prices: {} }, async (result) => {
+          await sendEmailRequest({ prices: result.prices }); // ⬅️ Email only after scrape finishes
+        });
       } else {
         log("📧 Daily scrape notification is disabled, not sending email request.");
       }

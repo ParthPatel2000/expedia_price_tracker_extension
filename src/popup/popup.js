@@ -330,20 +330,26 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 
 // Load saved delay on popup open
 chrome.storage.local.get({ pageDelay: 6 }, (result) => {
-  document.getElementById('delayInput').value = result.pageDelay;
+  if (typeof result.pageDelay === 'undefined') {
+    chrome.storage.local.set({ pageDelay: 6 });
+    document.getElementById('delayInput').value = 6;
+  } else {
+    document.getElementById('delayInput').value = result.pageDelay;
+  }
 });
 
-// Save delay on button click
-document.getElementById('saveDelayBtn').addEventListener('click', () => {
-  const delay = parseInt(document.getElementById('delayInput').value);
+const delayInput = document.getElementById('delayInput');
+
+delayInput.addEventListener('input', () => {
+  const delay = parseInt(delayInput.value);
   if (!isNaN(delay) && delay > 0) {
     chrome.storage.local.set({ pageDelay: delay }, () => {
       showStatusMsg(`✅ Page delay saved: ${delay} sec`, false);
     });
-  } else {
-    alert("Please enter a valid number greater than 0.");
   }
 });
+
+
 
 
 document.getElementById('dailyScrapeSwitch').addEventListener('change', () => {
@@ -439,11 +445,7 @@ if (process.env.NODE_ENV === 'development') {
   });
 
 
-  //listen for sendEmailRequest button click
-  document.getElementById('sendEmailBtn').addEventListener('click', () => {
-    chrome.runtime.sendMessage({ action: 'sendEmailRequest' });
-  });
-
+  // Send test email button
   document.getElementById('sendTestEmailBtn').addEventListener('click', () => {
     chrome.runtime.sendMessage({ action: 'testMail' });
   });

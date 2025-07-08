@@ -340,7 +340,7 @@ chrome.storage.local.get({ pageDelay: 6 }, (result) => {
 
 const delayInput = document.getElementById('delayInput');
 
-delayInput.addEventListener('input', () => {
+delayInput.addEventListener('change', () => {
   const delay = parseInt(delayInput.value);
   if (!isNaN(delay) && delay > 0) {
     chrome.storage.local.set({ pageDelay: delay }, () => {

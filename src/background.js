@@ -304,6 +304,7 @@ function generateUrls() {
   return props.map(p => updateUrlWithDates(p.url, checkIn, checkOut));
 }
 
+
 async function openTabsAndScrape() {
 
   const urls = generateUrls();
@@ -312,27 +313,35 @@ async function openTabsAndScrape() {
     const openInBackground = result.backgroundTabs;
 
     let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
+    try {
+      for (let i = 0; i < urls.length; i++) {
+        
+        chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
+        
+        const url = urls[i];
+        if (i > 0) {
+          await chrome.tabs.update(tab.id, { url });
+        }
 
-    for (let i = 0; i < urls.length; i++) {
-      const url = urls[i];
+        // showStatusMsg(`🔄 Scraping property ${i + 1} of ${urls.length}: ${props[i].name}`, false, 1000);
 
-      if (i > 0) {
-        await chrome.tabs.update(tab.id, { url });
+        const delay = await new Promise((resolve) => {
+          chrome.storage.local.get({ pageDelay: 6 }, (res) => resolve(res.pageDelay * 1000));
+        });
+
+        // let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
+
+        await new Promise(r => setTimeout(r, getRandomizedDelay(delay / 1000)));
+
+
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
       }
-
-      const delay = await new Promise((resolve) => {
-        chrome.storage.local.get({ pageDelay: 6 }, (res) => resolve(res.pageDelay * 1000));
-      });
-
-      // let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
-
-      await new Promise(r => setTimeout(r, getRandomizedDelay(delay / 1000)));
-
-
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['content.js']
-      });
+    } catch (err) {
+      showStatusMsg("❌ Error during scraping: " + err.message, true);
+      error("❌ Error during scraping:", err);
     }
 
     chrome.tabs.remove(tab.id, () => {
@@ -367,7 +376,11 @@ chrome.runtime.onMessage.addListener((message) => {
 
       prices[message.hotelName] = {
         price: message.price,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toLocaleString() // Store as local date string for easier readability 
+
+        // timestamp: new Date().toISOString()  // will use this if i turn this into a price tracker
+        // For now, we will store the timestamp as a local date string for easier readability 
+        // will need to change the popup.js to use this format
       };
 
       chrome.storage.local.set({ prices }, () => {
@@ -534,8 +547,8 @@ if (isDev) {
 
 //wrapper function for the showStatusMsg function in popup.js
 // This function sends a message to the popup to show a status message
-function showStatusMsg(msg, isError = false) {
-  chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError });
+function showStatusMsg(msg, isError = false, timeout = 3000) {
+  chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError, timeout });
 }
 
 //<--------------------------------------End of background.js-------------------------------------------------->

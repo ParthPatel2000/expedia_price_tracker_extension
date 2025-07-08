@@ -2,7 +2,8 @@
 
 import { DocumentReference } from "firebase/firestore";
 
-
+// will use this if i turn this into a price tracker
+// For now, we will store the timestamp as a local date string for easier readability
 // Format timestamp into a readable string
 function formatDate(dateStr) {
   let d = new Date(dateStr);
@@ -29,7 +30,10 @@ function renderPrices(prices) {
     priceTd.textContent = data.price;
 
     const timeTd = document.createElement('td');
-    timeTd.textContent = formatDate(data.timestamp);
+    timeTd.textContent = data.timestamp;
+
+    // timeTd.textContent = formatDate(data.timestamp); // will use this if i turn this into a price tracker
+    // For now, we will store the timestamp as a local date string for easier readability
 
     tr.appendChild(nameTd);
     tr.appendChild(priceTd);
@@ -421,8 +425,43 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   document.getElementById('refreshBtn').disabled = true;
   setTimeout(() => {
     document.getElementById('refreshBtn').disabled = false;
-  }, 3000);
+  }, 3000); // 3s max wait
 });
+
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'scrapingProgress') {
+    const { current, total } = message;
+
+    const progressPercent = (current / total) * 100;
+
+    const progressBar = document.getElementById('progressBar');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressText = document.getElementById('progressText');
+
+    progressContainer.style.display = 'block';
+    progressText.style.display = 'block';
+
+    progressBar.style.width = progressPercent + '%';
+    progressText.textContent = `Scraping ${current} of ${total}...`;
+
+    if (current === total) {
+      progressText.textContent = 'Scraping complete!';
+      // Optionally hide or reset the progress bar after a delay
+      setTimeout(() => {
+        progressContainer.style.display = 'none';
+        progressBar.style.width = '0%';
+        progressText.style.display = 'none';
+      }, 2000);
+    }
+  }
+
+  if (message.action === 'scrapingDone' || message.action === 'scrapingFailed') {
+    document.getElementById('refreshBtn').disabled = false;
+  }
+});
+
+
 
 // Google OAuth login button
 document.getElementById('googleLoginBtn').addEventListener('click', () => {
@@ -455,13 +494,13 @@ if (process.env.NODE_ENV === 'development') {
 // Listen for messages from background script to show status messages
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action === 'showStatusMsg') {
-    showStatusMsg(message.msg, message.isError);
+    showStatusMsg(message.msg, message.isError, message.timeout);
   }
 });
 
 
 // Status message helper functions
-function showStatusMsg(msg, isError = false) {
+function showStatusMsg(msg, isError = false, timeout = 3000) {
   const statusElems = document.querySelectorAll('.statusText');
 
   statusElems.forEach((el) => {
@@ -477,7 +516,7 @@ function showStatusMsg(msg, isError = false) {
     }
   });
 
-  setTimeout(clearStatusMsg, 3000);
+  setTimeout(clearStatusMsg, timeout);
 }
 
 function clearStatusMsg() {

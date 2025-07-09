@@ -3,7 +3,10 @@
   "name": "Expedia Price Scraper",
   "version": "3.1",
   "permissions": ["identity", "tabs", "scripting", "storage", "alarms"],
-  "host_permissions": ["https://www.expedia.com/*"],
+  "host_permissions": [
+  "https://www.expedia.com/*",
+  "https://raw.githubusercontent.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },

@@ -1,0 +1,37 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'  # You can use a different Node.js version if needed
+
+      - name: Install dependencies
+        run: npm ci  # This installs dependencies exactly as in package-lock.json
+
+      - name: Build project
+        run: npm run ship  # Or `npm run ship` if you prefer a non-watching production build
+
+      # (Optional) Upload build artifacts (if you need to download the dist files)
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: dist
+          path: dist/

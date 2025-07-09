@@ -31,7 +31,8 @@ jobs:
 
       # (Optional) Upload build artifacts (if you need to download the dist files)
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: dist
           path: dist/
+

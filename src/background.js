@@ -355,6 +355,29 @@ chrome.action.onClicked.addListener(() => {
   openTabsAndScrape();
 });
 
+async function getConfig() {
+  const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/src/extension_config.json';
+
+  const defaultConfig = {
+    priceSelector: '.uitk-text-default-theme',
+    soldOutSelector: '.uitk-text-negative-theme'
+  };
+
+  try {
+    const response = await fetch(configUrl);
+    if (!response.ok) throw new Error('Failed to fetch config');
+    const config = await response.json();
+
+    // Save to local cache
+    chrome.storage.local.set({ extensionConfig: config });
+    return config;
+  } catch (err) {
+    console.warn('⚠️ Using default config due to fetch error:', err);
+    return defaultConfig;
+  }
+}
+
+
 //listen for Google OAuth login request
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'startGoogleOAuth') {

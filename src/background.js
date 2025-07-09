@@ -330,13 +330,14 @@ async function openTabsAndScrape() {
         });
 
         // let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
-
+        const config = await getScrapeConfig();
         await new Promise(r => setTimeout(r, getRandomizedDelay(delay / 1000)));
-
+        
 
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          files: ['content.js']
+          files: ['content.js'],
+          args: [config],
         });
       }
     } catch (err) {

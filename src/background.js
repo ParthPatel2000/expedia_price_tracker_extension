@@ -323,8 +323,6 @@ async function openTabsAndScrape() {
           await chrome.tabs.update(tab.id, { url });
         }
 
-        // showStatusMsg(`🔄 Scraping property ${i + 1} of ${urls.length}: ${props[i].name}`, false, 1000);
-
         const delay = await new Promise((resolve) => {
           chrome.storage.local.get({ pageDelay: 6 }, (res) => resolve(res.pageDelay * 1000));
         });

@@ -1,4 +1,11 @@
 {
-  "priceSelector": ".uitk-text-default-theme",
-  "soldOutSelector": ".uitk-text-negative-theme"
+  "priceSelectors": [
+    ".uitk-text-default-theme",
+    ".uitk-type-300", 
+    ".alternate-price-class"
+  ],
+  "soldOutSelectors": [
+    ".uitk-text-negative-theme",
+    ".alternate-sold-out-class"
+  ]
 }

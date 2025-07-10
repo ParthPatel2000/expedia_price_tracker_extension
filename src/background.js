@@ -305,102 +305,102 @@ function generateUrls() {
 }
 
 
-async function openTabsAndScrape() {
+  async function openTabsAndScrape() {
 
-  const urls = generateUrls();
+    const urls = generateUrls();
 
-  chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
-    const openInBackground = result.backgroundTabs;
+    chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
+      const openInBackground = result.backgroundTabs;
 
-    let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
-    try {
-      for (let i = 0; i < urls.length; i++) {
-        
-        chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
-        
-        const url = urls[i];
-        if (i > 0) {
-          await chrome.tabs.update(tab.id, { url });
+      let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
+      try {
+        for (let i = 0; i < urls.length; i++) {
+          
+          chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
+          
+          const url = urls[i];
+          if (i > 0) {
+            await chrome.tabs.update(tab.id, { url });
+          }
+
+          const delay = await new Promise((resolve) => {
+            chrome.storage.local.get({ pageDelay: 6 }, (res) => resolve(res.pageDelay * 1000));
+          });
+
+          // let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
+          const config = await getScrapeConfig();
+          await new Promise(r => setTimeout(r, getRandomizedDelay(delay / 1000)));
+          
+
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: runScrapingScript,
+            args: [config],
+          });
         }
-
-        const delay = await new Promise((resolve) => {
-          chrome.storage.local.get({ pageDelay: 6 }, (res) => resolve(res.pageDelay * 1000));
-        });
-
-        // let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
-        const config = await getScrapeConfig();
-        await new Promise(r => setTimeout(r, getRandomizedDelay(delay / 1000)));
-        
-
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: runScrapingScript,
-          args: [config],
-        });
+      } catch (err) {
+        showStatusMsg("❌ Error during scraping: " + err.message, true);
+        error("❌ Error during scraping:", err);
       }
-    } catch (err) {
-      showStatusMsg("❌ Error during scraping: " + err.message, true);
-      error("❌ Error during scraping:", err);
-    }
 
-    chrome.tabs.remove(tab.id, () => {
-      console.log("Tab closed after scraping all properties");
+      chrome.tabs.remove(tab.id, () => {
+        console.log("Tab closed after scraping all properties");
+      });
     });
-  });
-}
-
-// Listen for the extension icon click to start scraping and send email request
-chrome.action.onClicked.addListener(() => {
-  openTabsAndScrape();
-});
-
-async function getConfig() {
-  const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/src/extension_config.json';
-
-  const defaultConfig = {
-    priceSelector: '.uitk-text-default-theme',
-    soldOutSelector: '.uitk-text-negative-theme'
-  };
-
-  try {
-    const response = await fetch(configUrl);
-    if (!response.ok) throw new Error('Failed to fetch config');
-    const config = await response.json();
-
-    // Save to local cache
-    chrome.storage.local.set({ extensionConfig: config });
-    return config;
-  } catch (err) {
-    console.warn('⚠️ Using default config due to fetch error:', err);
-    return defaultConfig;
   }
-}
 
-function runScrapingScript(config) {
-  const soldOutElement = document.querySelector(config.soldOutSelector);
-  let price = '';
+  // Listen for the extension icon click to start scraping and send email request
+  chrome.action.onClicked.addListener(() => {
+    openTabsAndScrape();
+  });
 
-  if (soldOutElement && soldOutElement.textContent.toLowerCase().includes('sold out')) {
-    price = 'Sold Out';
-  } else {
-    // Find all elements by selector and filter those with 'nightly'
-    const candidates = Array.from(document.querySelectorAll(config.priceSelector))
-      .filter(el => el.textContent.toLowerCase().includes('nightly'));
-    
-    if (candidates.length > 0) {
-      price = candidates[0].textContent.replace(/nightly/gi, '').trim();
-    } else {
-      price = 'Price not found';
+  async function getScrapeConfig() {
+    const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/src/extension_config.json';
+
+    const defaultConfig = {
+      priceSelector: '.uitk-text-default-theme',
+      soldOutSelector: '.uitk-text-negative-theme'
+    };
+
+    try {
+      const response = await fetch(configUrl);
+      if (!response.ok) throw new Error('Failed to fetch config');
+      const config = await response.json();
+
+      log('✅ Fetched config:', config);
+
+      return config;
+    } catch (err) {
+      console.warn('⚠️ Using default config due to fetch error:', err);
+      return defaultConfig;
     }
   }
 
-  let params = new URLSearchParams(window.location.search);
-  let hotelName = params.get('hotelName') || 'Unknown Hotel';
+  function runScrapingScript(config) {
+    const soldOutElement = document.querySelector(config.soldOutSelector);
+    let price = '';
 
-  console.log(`💾 Stored/updated price for ${hotelName}:`, price);
+    if (soldOutElement && soldOutElement.textContent.toLowerCase().includes('sold out')) {
+      price = 'Sold Out';
+    } else {
+      // Find all elements by selector and filter those with 'nightly'
+      const candidates = Array.from(document.querySelectorAll(config.priceSelector))
+        .filter(el => el.textContent.toLowerCase().includes('nightly'));
+      
+      if (candidates.length > 0) {
+        price = candidates[0].textContent.replace(/nightly/gi, '').trim();
+      } else {
+        price = 'Price not found';
+      }
+    }
 
-  chrome.runtime.sendMessage({ price, hotelName });
-}
+    let params = new URLSearchParams(window.location.search);
+    let hotelName = params.get('hotelName') || 'Unknown Hotel';
+
+    console.log(`💾 Stored/updated price for ${hotelName}:`, price);
+
+    chrome.runtime.sendMessage({ price, hotelName });
+  }
 
 
 //listen for Google OAuth login request

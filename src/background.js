@@ -367,7 +367,7 @@ chrome.action.onClicked.addListener(() => {
 });
 
 async function getScrapeConfig() {
-  const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/extension_config.json';
+  const configUrl = 'https://parthpatel2000.github.io/configs/expedia_config.json';
 
   const defaultConfig = {
     priceSelector: '.uitk-text-default-theme',
@@ -407,13 +407,23 @@ function runScrapingScript(config) {
   if (soldOutElement) {
     price = 'Sold Out';
   } else {
+    const keywords = config.priceKeywords?.map(k => k.toLowerCase()) || ['nightly', '$'];
+
     const priceElement = getFirstMatchingElement(
       config.priceSelectors || [config.priceSelector],
-      el => el.textContent.toLowerCase().includes('nightly')
+      el => {
+        const text = el.textContent.toLowerCase();
+        return keywords.some(keyword => text.includes(keyword));
+      }
     );
 
     if (priceElement) {
-      price = priceElement.textContent.replace(/nightly/gi, '').trim();
+      // Optionally strip all keywords (not just 'nightly') from the result
+      price = priceElement.textContent;
+      keywords.forEach(keyword => {
+        price = price.replace(new RegExp(keyword, 'gi'), '');
+      });
+      price = price.trim();
     } else {
       price = 'Price not found';
     }
@@ -425,6 +435,7 @@ function runScrapingScript(config) {
   console.log(`💾 Stored/updated price for ${hotelName}:`, price);
   chrome.runtime.sendMessage({ price, hotelName });
 }
+
 
 
 //listen for Google OAuth login request

@@ -1,11 +1,16 @@
 {
   "priceSelectors": [
     ".uitk-text-default-theme",
-    ".uitk-type-300", 
+    ".uitk-type-300",
     ".alternate-price-class"
   ],
   "soldOutSelectors": [
     ".uitk-text-negative-theme",
     ".alternate-sold-out-class"
+  ],
+  "priceKeywords": [
+    "$",
+    "nightly",
+    "per night"
   ]
 }

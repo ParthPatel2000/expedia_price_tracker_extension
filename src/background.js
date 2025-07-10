@@ -317,6 +317,8 @@ async function openTabsAndScrape() {
     chrome.storage.local.get({ pageDelay: 6 }, res => resolve(res.pageDelay * 1000))
   );
 
+  //fetch the scrape config from the remote JSON file
+  const config = await getScrapeConfig();
 
   chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
     const openInBackground = result.backgroundTabs;
@@ -333,7 +335,6 @@ async function openTabsAndScrape() {
           await chrome.tabs.update(tab.id, { url });
         }
 
-        const config = await getScrapeConfig();
         let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
         await new Promise(r => setTimeout(r, delayMs));
 
@@ -366,7 +367,7 @@ chrome.action.onClicked.addListener(() => {
 });
 
 async function getScrapeConfig() {
-  const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/src/extension_config.json';
+  const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/extension_config.json';
 
   const defaultConfig = {
     priceSelector: '.uitk-text-default-theme',

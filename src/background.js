@@ -249,7 +249,7 @@ let props = []; // Global variable to hold properties loaded from storage
 chrome.storage.local.get('propertyLinks', (result) => {
   if (Array.isArray(result.propertyLinks)) {
     props = result.propertyLinks;
-    log("✅ Loaded props from storage:", props);
+    log("✅ Loaded propertyLinks from storage:", props);
   } else {
     warn("⚠️ No propertyLinks found in storage.");
   }
@@ -305,102 +305,125 @@ function generateUrls() {
 }
 
 
-  async function openTabsAndScrape() {
+async function openTabsAndScrape() {
+  const urls = generateUrls();
+  if (!urls || urls.length === 0) {
+    showStatusMsg("⚠️ No URLs to scrape.", true);
+    return;
+  }
 
-    const urls = generateUrls();
 
-    chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
-      const openInBackground = result.backgroundTabs;
+  const delay = await new Promise(resolve =>
+    chrome.storage.local.get({ pageDelay: 6 }, res => resolve(res.pageDelay * 1000))
+  );
 
-      let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
-      try {
-        for (let i = 0; i < urls.length; i++) {
-          
-          chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
-          
-          const url = urls[i];
-          if (i > 0) {
-            await chrome.tabs.update(tab.id, { url });
-          }
 
-          const delay = await new Promise((resolve) => {
-            chrome.storage.local.get({ pageDelay: 6 }, (res) => resolve(res.pageDelay * 1000));
-          });
+  chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
+    const openInBackground = result.backgroundTabs;
 
-          // let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
-          const config = await getScrapeConfig();
-          await new Promise(r => setTimeout(r, getRandomizedDelay(delay / 1000)));
-          
+    let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
 
+    try {
+      for (let i = 0; i < urls.length; i++) {
+
+        chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
+
+        const url = urls[i];
+        if (i > 0) {
+          await chrome.tabs.update(tab.id, { url });
+        }
+
+        const config = await getScrapeConfig();
+        let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
+        await new Promise(r => setTimeout(r, delayMs));
+
+        try {
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: runScrapingScript,
             args: [config],
           });
+        } catch (err) {
+          showStatusMsg("❌ Error executing scraping script: " + err.message, true);
+          error("❌ Error executing scraping script:", err);
+          continue; // Skip to next URL if script fails
         }
-      } catch (err) {
-        showStatusMsg("❌ Error during scraping: " + err.message, true);
-        error("❌ Error during scraping:", err);
       }
-
-      chrome.tabs.remove(tab.id, () => {
-        console.log("Tab closed after scraping all properties");
-      });
-    });
-  }
-
-  // Listen for the extension icon click to start scraping and send email request
-  chrome.action.onClicked.addListener(() => {
-    openTabsAndScrape();
-  });
-
-  async function getScrapeConfig() {
-    const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/src/extension_config.json';
-
-    const defaultConfig = {
-      priceSelector: '.uitk-text-default-theme',
-      soldOutSelector: '.uitk-text-negative-theme'
-    };
-
-    try {
-      const response = await fetch(configUrl);
-      if (!response.ok) throw new Error('Failed to fetch config');
-      const config = await response.json();
-
-      log('✅ Fetched config:', config);
-
-      return config;
     } catch (err) {
-      console.warn('⚠️ Using default config due to fetch error:', err);
-      return defaultConfig;
+      showStatusMsg("❌ Error during scraping: " + err.message, true);
+      error("❌ Error during scraping:", err);
     }
+
+    chrome.tabs.remove(tab.id, () => {
+      console.log("Tab closed after scraping all properties");
+    });
+  });
+}
+
+// Listen for the extension icon click to start scraping and send email request
+chrome.action.onClicked.addListener(() => {
+  openTabsAndScrape();
+});
+
+async function getScrapeConfig() {
+  const configUrl = 'https://raw.githubusercontent.com/ParthPatel2000/expedia_price_tracker_extension/main/src/extension_config.json';
+
+  const defaultConfig = {
+    priceSelector: '.uitk-text-default-theme',
+    soldOutSelector: '.uitk-text-negative-theme'
+  };
+
+  try {
+    const response = await fetch(configUrl);
+    if (!response.ok) throw new Error('Failed to fetch config');
+    const config = await response.json();
+
+    log('✅ Fetched config:', config);
+
+    return config;
+  } catch (err) {
+    console.warn('⚠️ Using default config due to fetch error:', err);
+    return defaultConfig;
   }
+}
 
-  function runScrapingScript(config) {
-    const soldOutElement = document.querySelector(config.soldOutSelector);
-    let price = '';
+function runScrapingScript(config) {
+  const getFirstMatchingElement = (selectors, filterFn = () => true) => {
+    for (const selector of selectors) {
+      const elements = Array.from(document.querySelectorAll(selector)).filter(filterFn);
+      if (elements.length > 0) return elements[0];
+    }
+    return null;
+  };
 
-    if (soldOutElement && soldOutElement.textContent.toLowerCase().includes('sold out')) {
-      price = 'Sold Out';
+  let price = '';
+
+  const soldOutElement = getFirstMatchingElement(
+    config.soldOutSelectors || [config.soldOutSelector],
+    el => el.textContent.toLowerCase().includes('sold out')
+  );
+
+  if (soldOutElement) {
+    price = 'Sold Out';
+  } else {
+    const priceElement = getFirstMatchingElement(
+      config.priceSelectors || [config.priceSelector],
+      el => el.textContent.toLowerCase().includes('nightly')
+    );
+
+    if (priceElement) {
+      price = priceElement.textContent.replace(/nightly/gi, '').trim();
     } else {
-      // Find all elements by selector and filter those with 'nightly'
-      const candidates = Array.from(document.querySelectorAll(config.priceSelector))
-        .filter(el => el.textContent.toLowerCase().includes('nightly'));
-      
-      if (candidates.length > 0) {
-        price = candidates[0].textContent.replace(/nightly/gi, '').trim();
-      } else {
-        price = 'Price not found';
-      }
+      price = 'Price not found';
     }
-
-    let params = new URLSearchParams(window.location.search);
-    let hotelName = params.get('hotelName') || 'Unknown Hotel';
-
-    console.log(`💾 Stored/updated price for ${hotelName}:`, price);
-
-    chrome.runtime.sendMessage({ price, hotelName });
   }
+
+  const params = new URLSearchParams(window.location.search);
+  const hotelName = params.get('hotelName') || 'Unknown Hotel';
+
+  console.log(`💾 Stored/updated price for ${hotelName}:`, price);
+  chrome.runtime.sendMessage({ price, hotelName });
+}
 
 
 //listen for Google OAuth login request

@@ -263,6 +263,12 @@
 <body>
   <!-- Prices View -->
   <section id="pricesView" class="view-section">
+
+    <div class="section-block dev-only button-group">
+      <!-- Dev-only Buttons -->
+      <button id="clearPricesBtn">🧹</button>
+    </div>
+
     <div style="display: flex; justify-content: space-between; align-items: center;">
       <h3 style="margin: 0;">Hotel Prices</h3>
       <button id="settingsBtn" title="Settings">⚙️ Settings</button>
@@ -297,7 +303,7 @@
       </div>
       <button id="refreshBtn">Refresh Prices</button>
     </div>
-    
+
     <div id="progressContainer"
       style="display:none; width: 100%; background: #eee; border-radius: 4px; overflow: hidden; margin-top: 10px;">
       <div id="progressBar" style="height: 10px; width: 0%; background: #4caf50;"></div>

@@ -210,6 +210,15 @@ function showPricesView() {
   document.getElementById('dailyScrapeView').style.display = 'none';
   document.getElementById('pricesView').style.display = 'block';
   loadPrices();
+  // Show dev-only elements in development mode
+  if (process.env.NODE_ENV === 'development') {
+    document.querySelectorAll('.dev-only').forEach(el => {
+      el.style.display = 'block'; // or 'inline-block', as needed
+    });
+  } else {
+    // Optionally remove them in production to avoid unused DOM elements
+    document.querySelectorAll('.dev-only').forEach(el => el.remove());
+  }
 }
 
 function showSettingsView() {
@@ -404,6 +413,13 @@ document.getElementById('add-link').addEventListener('click', addCurrentExpediaL
 document.getElementById('dailyScrapeBtn').addEventListener('click', showDailyScrapeView);
 document.querySelectorAll('.backToSettings').forEach(btn => {
   btn.addEventListener('click', showSettingsView);
+});
+
+document.getElementById('clearPricesBtn').addEventListener('click', () => {
+  chrome.storage.local.set({ prices: {} }, () => {
+    loadPrices();
+    showStatusMsg('✅ All prices cleared.', false);
+  });
 });
 
 

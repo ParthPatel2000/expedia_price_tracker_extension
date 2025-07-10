@@ -10,7 +10,6 @@ module.exports = (env, argv) => {
         mode: argv.mode || 'development',
         entry: {
             background: './src/background.js',
-            content: './src/content.js',
             'popup/popup': './src/popup/popup.js',
         },
         output: {

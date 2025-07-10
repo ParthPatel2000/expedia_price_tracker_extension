@@ -326,10 +326,10 @@ async function openTabsAndScrape() {
     let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
 
     try {
+      
       for (let i = 0; i < urls.length; i++) {
-
         chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
-
+        
         const url = urls[i];
         if (i > 0) {
           await chrome.tabs.update(tab.id, { url });
@@ -337,7 +337,7 @@ async function openTabsAndScrape() {
 
         let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
         await new Promise(r => setTimeout(r, delayMs));
-
+        
         try {
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },

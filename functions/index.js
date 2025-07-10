@@ -105,7 +105,7 @@ function pricesToHtmlTable(prices) {
            #f4f4f4;">Price</th>
           <th 
           style="padding: 8px; border: 1px solid #ddd; background-color:
-           #f4f4f4;">Last Updated (UTC)</th>
+           #f4f4f4;">Last Updated</th>
         </tr>
       </thead>
       <tbody>

@@ -326,10 +326,10 @@ async function openTabsAndScrape() {
     let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
 
     try {
-      
+
       for (let i = 0; i < urls.length; i++) {
         chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
-        
+
         const url = urls[i];
         if (i > 0) {
           await chrome.tabs.update(tab.id, { url });
@@ -337,7 +337,7 @@ async function openTabsAndScrape() {
 
         let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
         await new Promise(r => setTimeout(r, delayMs));
-        
+
         try {
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
@@ -380,61 +380,67 @@ async function getScrapeConfig() {
     const config = await response.json();
 
     log('✅ Fetched config:', config);
-
+    
     return config;
   } catch (err) {
     console.warn('⚠️ Using default config due to fetch error:', err);
     return defaultConfig;
-  }
-}
+  }  
+}  
 
+
+//The scraping script for extracting price from HTML.
 function runScrapingScript(config) {
-  const getFirstMatchingElement = (selectors, filterFn = () => true) => {
-    for (const selector of selectors) {
-      const elements = Array.from(document.querySelectorAll(selector)).filter(filterFn);
+  var getFirstMatchingElement = function(selectors, filterFn) {
+    filterFn = filterFn || function() { return true; };
+    for (var i = 0; i < selectors.length; i++) {
+      var selector = selectors[i];
+      var elements = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(filterFn);
       if (elements.length > 0) return elements[0];
-    }
+    }  
     return null;
-  };
+  };  
 
-  let price = '';
+  var price = '';
 
-  const soldOutElement = getFirstMatchingElement(
-    config.soldOutSelectors || [config.soldOutSelector],
-    el => el.textContent.toLowerCase().includes('sold out')
-  );
+  var soldOutSelectors = config.soldOutSelectors || (config.soldOutSelector ? [config.soldOutSelector] : []);
+  var soldOutElement = getFirstMatchingElement(
+    soldOutSelectors,
+    function(el) { return el.textContent.toLowerCase().indexOf('sold out') !== -1; }
+  );  
 
   if (soldOutElement) {
     price = 'Sold Out';
   } else {
-    const keywords = config.priceKeywords?.map(k => k.toLowerCase()) || ['nightly', '$'];
-
-    const priceElement = getFirstMatchingElement(
-      config.priceSelectors || [config.priceSelector],
-      el => {
-        const text = el.textContent.toLowerCase();
-        return keywords.some(keyword => text.includes(keyword));
-      }
-    );
+    var keywords = (config.priceKeywords && config.priceKeywords.map(function(k) { return k.toLowerCase(); })) || ['nightly', '$'];
+    var priceSelectors = config.priceSelectors || (config.priceSelector ? [config.priceSelector] : []);
+    var priceElement = getFirstMatchingElement(
+      priceSelectors,
+      function(el) {
+        var text = el.textContent.toLowerCase();
+        return keywords.some(function(keyword) { return text.indexOf(keyword) !== -1; });
+      }  
+    );  
 
     if (priceElement) {
-      // Optionally strip all keywords (not just 'nightly') from the result
       price = priceElement.textContent;
-      keywords.forEach(keyword => {
-        price = price.replace(new RegExp(keyword, 'gi'), '');
-      });
+      keywords.forEach(function(keyword) {
+        var regex = new RegExp(keyword, 'gi');
+        price = price.replace(regex, '');
+      });  
       price = price.trim();
     } else {
       price = 'Price not found';
-    }
-  }
+    }  
+  }  
 
-  const params = new URLSearchParams(window.location.search);
-  const hotelName = params.get('hotelName') || 'Unknown Hotel';
+  var params = new URLSearchParams(window.location.search);
+  var hotelName = params.get('hotelName') || 'Unknown Hotel';
 
-  console.log(`💾 Stored/updated price for ${hotelName}:`, price);
-  chrome.runtime.sendMessage({ price, hotelName });
-}
+  console.log('💾 Stored/updated price for ' + hotelName + ':', price);
+  chrome.runtime.sendMessage({ price: price, hotelName: hotelName });
+}  
+
 
 
 

@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Use Tailwind v4 color syntax */
+.test-bg {
+  @apply bg-blue-500 text-white p-4 rounded;
+}

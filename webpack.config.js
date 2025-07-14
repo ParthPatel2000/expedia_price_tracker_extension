@@ -10,7 +10,7 @@ module.exports = (env, argv) => {
         mode: argv.mode || 'development',
         entry: {
             background: './src/background.js',
-            'popup/popup': './src/popup/popup.js',
+            'popup/popup': './src/popup/popup.jsx',
         },
         output: {
             path: path.resolve(__dirname, 'dist'),
@@ -21,16 +21,12 @@ module.exports = (env, argv) => {
                 patterns: [
                     { from: 'manifest.json', to: '' },
                     { from: 'src/popup/popup.html', to: 'popup' },
-                    { from: 'src/icons', to: 'icons' }, 
+                    { from: 'src/icons', to: 'icons' },
                 ],
             }),
-
-            // Inject NODE_ENV for conditional logic
             new webpack.DefinePlugin({
                 'process.env.NODE_ENV': JSON.stringify(argv.mode),
             }),
-
-            // Load .env.development or .env.production based on mode
             new Dotenv({
                 path: isDev ? './.env.development' : './.env.production',
                 systemvars: true,
@@ -41,11 +37,33 @@ module.exports = (env, argv) => {
                 crypto: false,
                 stream: false,
             },
+            extensions: ['.js', '.jsx'],
+        },
+        module: {
+            rules: [
+                {
+                    test: /\.jsx?$/,
+                    exclude: /node_modules/,
+                    use: {
+                        loader: 'babel-loader',
+                        options: {
+                            presets: ['@babel/preset-env', '@babel/preset-react'],
+                        },
+                    },
+                },
+                {
+                    test: /\.css$/i,
+                    use: ['style-loader', 'css-loader', 'postcss-loader'],
+                },
+                {
+                    test: /\.(png|svg|jpg|jpeg|gif)$/i,
+                    type: 'asset/resource',
+                },
+            ],
         },
         experiments: {
             topLevelAwait: true,
         },
         devtool: isDev ? 'cheap-module-source-map' : false,
-
     };
 };

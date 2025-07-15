@@ -162,6 +162,30 @@ function launchGoogleOAuth() {
   );
 }
 
+// Function to sign out the user
+function LogoutUser() {
+  signOut(auth)
+    .then(() => {
+      log("👋 User signed out successfully.");
+
+      chrome.storage.local.remove(
+        ['propertyLinks', 'prices', 'isPrimed', 'notificationEmail'],
+        () => {
+          log("✅ Cleared propertyLinks from local storage.");
+        }
+      );
+
+      return signInAnonymously(auth); // fallback anonymous auth
+    })
+    .then(() => {
+      log("🔄 Reverted to anonymous user after logout.");
+    })
+    .catch((err) => {
+      error("❌ Sign-out error:", err);
+    });
+}
+
+
 
 
 
@@ -424,14 +448,26 @@ function runScrapingScript(config) {
   chrome.runtime.sendMessage({ action: "storePrice", price: price, hotelName: hotelName });
 }
 
+function storePrice(hotelName, price) {
+  chrome.storage.local.get({ prices: {} }, (result) => {
+    const prices = result.prices;
 
+    prices[hotelName] = {
+      price,
+      timestamp: new Date().toLocaleString(), // easy-to-read format
+      timestamp: new Date().toLocaleString() // Store as local date string for easier readability 
 
+      // timestamp: new Date().toISOString()  // will use this if i turn this into a price tracker
+      // For now, we will store the timestamp as a local date string for easier readability 
+      // will need to change the popup.js to use this format
+    };
 
+    chrome.storage.local.set({ prices }, () => {
+      log(`💾 Stored/updated price for ${hotelName}:`, prices[hotelName]);
+    });
+  });
+}
 
-// main scraping and storage logic
-chrome.runtime.onMessage.addListener((message) => {
-
-});
 
 
 //<--------------------------------------Notification System ------------------------------------------------------>
@@ -443,13 +479,13 @@ async function sendEmailRequest(requestData) {
     return;
   }
 
-  const getFromStorage = (key) => {
-    return new Promise((resolve) => {
-      chrome.storage.local.get(key, (result) => resolve(result[key]));
+  // Inline the chrome.storage.local.get wrapped in a promise
+  const storedEmail = await new Promise((resolve) => {
+    chrome.storage.local.get('notificationEmail', (result) => {
+      resolve(result.notificationEmail);
     });
-  };
+  });
 
-  const storedEmail = await getFromStorage('notificationEmail');
   const email = storedEmail || user.email;
 
   if (!email) {
@@ -470,30 +506,22 @@ async function sendEmailRequest(requestData) {
 }
 
 
-
-
-
 // <--------------------------------------Alarm System------------------------------------------------------>
-// Schedule a daily scrape at a specific time
+// Schedule a daily scrape at a specific time and send the notification email
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'dailyScrape') {
     log('⏰ Daily scrape alarm triggered');
 
-    const { dailyScrapeNotificationEnabled } = await new Promise((resolve) => {
-      chrome.storage.local.get(['dailyScrapeNotificationEnabled'], resolve);
-    });
-
     try {
-      await openTabsAndScrape(); // 🔄 Wait until all scraping is done
+      await openTabsAndScrape(); // wait for scrape
 
-      if (dailyScrapeNotificationEnabled) {
-        log("📧 Sending email request for scraped prices");
-        chrome.storage.local.get({ prices: {} }, async (result) => {
-          await sendEmailRequest({ prices: result.prices }); // ⬅️ Email only after scrape finishes
-        });
-      } else {
-        log("📧 Daily scrape notification is disabled, not sending email request.");
-      }
+      log("📧 Sending email request for scraped prices");
+
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get({ prices: {} }, resolve);
+      });
+
+      await sendEmailRequest({ prices: result.prices });
 
     } catch (err) {
       console.error("❌ Error during daily scrape or email:", err);
@@ -502,10 +530,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 });
 
 
-
 function scheduleDailyScrape(hour = 11, minute = 10) {
   chrome.storage.local.set({ dailyScrapeTime: { hour, minute } }, () => {
-    log(`✅ Saved daily scrape time at ${hour}:${minute < 10 ? '0' : ''}${minute} in local storage`);
+    log(`✅ Saved daily scrape time at ${hour}:${minute < 10 ? '0' : ''}${minute} in local storage and marked as enabled.`);
   });
 
   chrome.alarms.clear('dailyScrape', () => {
@@ -520,7 +547,7 @@ function scheduleDailyScrape(hour = 11, minute = 10) {
 
     chrome.alarms.create('dailyScrape', { when: when.getTime(), periodInMinutes: 24 * 60 });
     log(`Scheduled daily scrape alarm at ${hour}:${minute < 10 ? '0' : ''}${minute}`);
-    showStatusMsg(`Scheduled daily scrape at ${hour}:${minute < 10 ? '0' : ''}${minute}`, false);
+    showStatusMsg(`Scheduled daily scrape at ${hour}:${minute < 10 ? '0' : ''}${minute} every day.`, false);
   });
 }
 
@@ -529,6 +556,70 @@ function scheduleDailyScrape(hour = 11, minute = 10) {
 // This function sends a message to the popup to show a status message
 function showStatusMsg(msg, isError = false, timeout = 3000) {
   chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError, timeout });
+}
+
+function cancelDailyScrape() {
+  chrome.alarms.get('dailyScrape', (alarm) => {
+    if (!alarm) {
+      showStatusMsg("⚠️ No daily scrape alarm exists.", true);
+      console.log("⚠️ No alarm named 'dailyScrape' found.");
+      return;
+    }
+
+    chrome.alarms.clear('dailyScrape', () => {
+      chrome.alarms.get('dailyScrape', (afterClear) => {
+        if (!afterClear) {
+          showStatusMsg("✅ Daily scrape alarm cancelled.", false);
+          console.log("✅ Alarm 'dailyScrape' cleared.");
+        } else {
+          showStatusMsg("❌ Failed to cancel daily scrape alarm.", true);
+          console.log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
+        }
+      });
+    });
+  });
+}
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'frequentScrape') {
+    log('⏰ Frequent scrape alarm triggered');
+
+    try {
+      await openTabsAndScrape();
+    } catch (err) {
+      console.error("❌ Error during frequent scrape:", err);
+    }
+  }
+});
+
+function scheduleFrequentScrape(intervalInMinutes = 30) {
+  chrome.alarms.clear('frequentScrape', () => {
+    const when = Date.now() + intervalInMinutes * 60 * 1000;
+    chrome.alarms.create('frequentScrape', { when, periodInMinutes: intervalInMinutes });
+    showStatusMsg(`✅ Scheduled frequent scrape every ${intervalInMinutes} minutes.`);
+  });
+}
+
+function cancelFrequentScrape() {
+  chrome.alarms.get('frequentScrape', (alarm) => {
+    if (!alarm) {
+      showStatusMsg("⚠️ No frequent scrape alarm exists.", true);
+      console.log("⚠️ No alarm named 'frequentScrape' found.");
+    } else {
+      chrome.alarms.clear('frequentScrape', () => {
+        // Recheck just to confirm it's gone
+        chrome.alarms.get('frequentScrape', (afterClear) => {
+          if (!afterClear) {
+            showStatusMsg("✅ Frequent scrape alarm cancelled.", false);
+            console.log("✅ Alarm 'frequentScrape' cleared.");
+          } else {
+            showStatusMsg("❌ Failed to cancel frequent scrape alarm.", true);
+            console.log("❌ Alarm 'frequentScrape' still exists after attempting to clear.");
+          }
+        });
+      });
+    }
+  });
 }
 
 // <--------------------------------------Listeners------------------------------------------------------>
@@ -554,65 +645,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       openTabsAndScrape();
       break;
     case 'logoutUser':
-      signOut(auth)
-        .then(() => {
-          log("👋 User signed out successfully.");
-          chrome.storage.local.remove(['propertyLinks', 'prices', 'isPrimed', 'notificationEmail'], () => {
-            log("✅ Cleared propertyLinks from local storage.");
-          });
-          // Optionally sign in anonymously again
-          return signInAnonymously(auth);
-        })
-        .then(() => {
-          log("🔄 Reverted to anonymous user after logout.");
-        })
-        .catch((error) => {
-          error("❌ Sign-out error:", error);
-        });
+      LogoutUser();
       break;
     case 'scheduleDailyScrape':
-      const { hour, minute } = message;
-      scheduleDailyScrape(hour, minute);
+      {
+        const { hour, minute } = message;
+        scheduleDailyScrape(hour, minute);
+      }
+      break;
+    case 'scheduleFrequentScrape':
+      {
+        const { intervalInMinutes } = message;
+        scheduleFrequentScrape(intervalInMinutes || 30); // Default to 30 minutes if not provided
+      }
       break;
     case 'cancelDailyScrape':
-      chrome.alarms.get('dailyScrape', (alarm) => {
-        if (!alarm) {
-          showStatusMsg("⚠️ No daily scrape alarm exists.", true);
-          console.log("⚠️ No alarm named 'dailyScrape' found.");
-        } else {
-          chrome.alarms.clear('dailyScrape', () => {
-            // Recheck just to confirm it's gone
-            chrome.alarms.get('dailyScrape', (afterClear) => {
-              if (!afterClear) {
-                showStatusMsg("✅ Daily scrape alarm cancelled.", false);
-                console.log("✅ Alarm 'dailyScrape' cleared.");
-              } else {
-                showStatusMsg("❌ Failed to cancel daily scrape alarm.", true);
-                console.log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
-              }
-            });
-          });
-        }
-      });
+      cancelDailyScrape();
+      break;
+    case 'cancelFrequentScrape':
+      cancelFrequentScrape();
       break;
     case "storePrice":
       if (message.hotelName && message.price) {
-        chrome.storage.local.get({ prices: {} }, (result) => {
-          const prices = result.prices;
-
-          prices[message.hotelName] = {
-            price: message.price,
-            timestamp: new Date().toLocaleString() // Store as local date string for easier readability 
-
-            // timestamp: new Date().toISOString()  // will use this if i turn this into a price tracker
-            // For now, we will store the timestamp as a local date string for easier readability 
-            // will need to change the popup.js to use this format
-          };
-
-          chrome.storage.local.set({ prices }, () => {
-            log(`💾 Stored/updated price for ${message.hotelName}:`, prices[message.hotelName]);
-          });
-        });
+        storePrice(message.hotelName, message.price);
       }
       break;
     default:

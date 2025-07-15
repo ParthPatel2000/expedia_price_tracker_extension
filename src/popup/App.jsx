@@ -507,18 +507,13 @@ function PropertiesView({ onBack, statusMsg, isError, showStatusMsg }) {
 }
 
 function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
-    const [dailyScrapeEnabled, setDailyScrapeEnabled] = React.useState(false);
-    const [dailyScrapeNotificationEnabled, setDailyScrapeNotificationEnabled] = React.useState(false);
-    const [dailyScrapeTime, setDailyScrapeTime] = React.useState('11:00');
+    const [dailyScrapeEnabled, setDailyScrapeEnabled] = React.useState(false); //local state for toggle
+    const [dailyScrapeTime, setDailyScrapeTime] = React.useState('11:10'); //default time
 
     // Load settings on mount
     React.useEffect(() => {
         chrome.alarms.get('dailyScrape', (alarm) => {
             setDailyScrapeEnabled(!!alarm);
-        });
-
-        chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
-            setDailyScrapeNotificationEnabled(result.dailyScrapeNotificationEnabled ?? false);
         });
 
         chrome.storage.local.get('dailyScrapeTime', (result) => {
@@ -554,7 +549,6 @@ function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
         }
 
         setDailyScrapeEnabled(checked);
-        chrome.storage.local.set({ dailyScrapeEnabled: checked });
     }
 
     // Handle time change
@@ -573,20 +567,8 @@ function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
             showStatusMsg("⛔ Invalid time format", true);
             return;
         }
-
-        showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`);
         setDailyScrapeEnabled(true);
-        chrome.storage.local.set({
-            dailyScrapeEnabled: true,
-        });
-    }
-
-    // Handle email notification toggle
-    function handleNotificationToggle(e) {
-        const checked = e.target.checked;
-        setDailyScrapeNotificationEnabled(checked);
-        chrome.storage.local.set({ dailyScrapeNotificationEnabled: checked });
-        showStatusMsg(`Daily price notification ${checked ? 'enabled' : 'disabled'}`);
+        showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`);
     }
 
     return (
@@ -600,50 +582,39 @@ function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
             <h3 className="heading-md mb-4">Daily Scrape Schedule</h3>
 
             {/* Scrape Time */}
-            <div className="mb-4 flex items-center gap-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+                {/* Left label */}
                 <label htmlFor="dailyScrapeTime" className="label">
-                    Daily Scrape Time:
+                    Daily Scrape Time
                 </label>
-                <input
-                    type="time"
-                    id="dailyScrapeTime"
-                    value={dailyScrapeTime}
-                    onChange={handleTimeChange}
-                    className="input w-32"
-                />
+
+                {/* Time input with switch */}
+                <div className="relative w-44">
+                    <input
+                        type="time"
+                        id="dailyScrapeTime"
+                        value={dailyScrapeTime}
+                        onChange={handleTimeChange}
+                        className="input w-full pr-14"
+                    />
+
+                    {/* Toggle Switch */}
+                    <label
+                        htmlFor="dailyScrapeSwitch"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 toggle-switch"
+                    >
+                        <input
+                            id="dailyScrapeSwitch"
+                            type="checkbox"
+                            checked={dailyScrapeEnabled}
+                            onChange={handleDailyScrapeToggle}
+
+                        />
+                        <span className="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
 
-            {/* Daily Scrape Toggle */}
-            <div className="mb-4 flex justify-between items-center">
-                <label htmlFor="dailyScrapeSwitch" className="label">
-                    Enable Daily Scrape
-                </label>
-                <label className="toggle-switch" htmlFor="dailyScrapeSwitch">
-                    <input
-                        id="dailyScrapeSwitch"
-                        type="checkbox"
-                        checked={dailyScrapeEnabled}
-                        onChange={handleDailyScrapeToggle}
-                    />
-                    <span className="toggle-slider"></span>
-                </label>
-            </div>
-
-            {/* Notification Toggle */}
-            <div className="mb-4 flex justify-between items-center">
-                <label htmlFor="dailyScrapeNotificationSwitch" className="label">
-                    Send Email Notifications
-                </label>
-                <label className="toggle-switch" htmlFor="dailyScrapeNotificationSwitch">
-                    <input
-                        id="dailyScrapeNotificationSwitch"
-                        type="checkbox"
-                        checked={dailyScrapeNotificationEnabled}
-                        onChange={handleNotificationToggle}
-                    />
-                    <span className="toggle-slider"></span>
-                </label>
-            </div>
 
             {/* Status Message */}
             {statusMsg && (

@@ -287,7 +287,8 @@ function generateUrls() {
   return props.map(p => updateUrlWithDates(p.url, checkIn, checkOut));
 }
 
-async function openTabsAndScrape() {
+async function openTabsAndScrape_() {
+  let anyError = false;
   const urls = generateUrls();
   if (!urls || urls.length === 0) {
     showStatusMsg("⚠️ No URLs to scrape.", true);
@@ -337,6 +338,7 @@ async function openTabsAndScrape() {
         });
       }
       catch (err) {
+        anyError = true;
         if (err.message.includes("No tab with id")) {
           showStatusMsg("⚠️ tab closed unexpectedly.", true);
           error("⚠️ Tab closed unexpectedly while scraping:", err);
@@ -351,17 +353,27 @@ async function openTabsAndScrape() {
       }
     }
   } catch (err) {
+    anyError = true;
     showStatusMsg("❌ Error during scraping: " + err.message, true);
     error("❌ Error during scraping:", err);
     chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: err.message });
-
   }
   finally {
-    // Wait for tab removal before resolving
-    chrome.storage.local.set({
-      scrapeProgress: { current: 0, total: 0 },
-      isScraping: false
+    // Reset scraping state
+    await new Promise((resolve) => {
+      chrome.storage.local.set({
+        scrapeProgress: { current: 0, total: 0 },
+        isScraping: false
+      }, resolve);
     });
+
+    if (!anyError) {
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ lastrun: new Date().toISOString() }, resolve);
+      });
+    }
+
+    // Close the tab after scraping is complete
     await new Promise((resolve) => {
       chrome.tabs.remove(tab.id, () => {
         console.log("Tab closed after scraping all properties");
@@ -370,8 +382,56 @@ async function openTabsAndScrape() {
     });
   }
 
-
 }
+
+async function openTabsAndScrape({ waitIfBusy = false } = {}) {
+  const getIsScraping = () =>
+    new Promise((resolve) =>
+      chrome.storage.local.get({ isScraping: false }, (res) => resolve(res.isScraping))
+    );
+
+  const setIsScraping = (value) =>
+    chrome.storage.local.set({ isScraping: value });
+
+  const lastRun = await new Promise((resolve) =>
+    chrome.storage.local.get({ lastrun: null }, (result) => resolve(result.lastrun))
+  );
+
+  // Check if last run was within the last 5 minutes
+  if (lastRun) {
+    const minutesSince = (Date.now() - new Date(lastRun)) / 1000 / 60;
+    if (minutesSince < 5) { // 5 minutes
+      log(`🛑 Skipping scrape — last one was just ${minutesSince.toFixed(1)} min ago.`);
+      showStatusMsg(`🛑 Skipping scrape — last one was just ${minutesSince.toFixed(1)} min ago.`, true);
+      return;
+    }
+  }
+
+  if (await getIsScraping()) {
+    if (waitIfBusy) {
+      console.log("⏳ Scrape in progress, waiting...");
+      while (await getIsScraping()) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      console.log("✅ Previous scrape finished. Proceeding...");
+      return 'used existing scrape';
+    } else {
+      console.warn("⚠️ Scrape already in progress. Aborting new scrape.");
+      return null;
+    }
+  }
+
+  try {
+    await setIsScraping(true);
+    await openTabsAndScrape_();
+  } catch (err) {
+    console.error("❌ Error inside scrape lock wrapper:", err);
+    throw err;
+  } finally {
+    await setIsScraping(false);
+  }
+}
+
 
 async function getScrapeConfig() {
   const configUrl = 'https://parthpatel2000.github.io/configs/expedia_config.json';
@@ -513,8 +573,12 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     log('⏰ Daily scrape alarm triggered');
 
     try {
-      await openTabsAndScrape(); // wait for scrape
-
+      const message = await openTabsAndScrape({ waitIfBusy: true }); // wait for scrape
+      if (message === 'used existing scrape') {
+        log("✅ Using existing scrape data.");
+      } else {
+        log("✅ Scrape completed successfully.");
+      }
       log("📧 Sending email request for scraped prices");
 
       const result = await new Promise((resolve) => {
@@ -525,6 +589,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
     } catch (err) {
       console.error("❌ Error during daily scrape or email:", err);
+    }
+  }
+  else if (alarm.name === 'frequentScrape') {
+    log('⏰ Frequent scrape alarm triggered');
+    try {
+      await openTabsAndScrape();
+    } catch (err) {
+      console.error("❌ Error during frequent scrape:", err);
     }
   }
 });
@@ -580,19 +652,7 @@ function cancelDailyScrape() {
   });
 }
 
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === 'frequentScrape') {
-    log('⏰ Frequent scrape alarm triggered');
-
-    try {
-      await openTabsAndScrape();
-    } catch (err) {
-      console.error("❌ Error during frequent scrape:", err);
-    }
-  }
-});
-
-function scheduleFrequentScrape(intervalInMinutes = 30) {
+function scheduleFrequentScrape(intervalInMinutes) {
   chrome.alarms.clear('frequentScrape', () => {
     const when = Date.now() + intervalInMinutes * 60 * 1000;
     chrome.alarms.create('frequentScrape', { when, periodInMinutes: intervalInMinutes });
@@ -655,8 +715,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     case 'scheduleFrequentScrape':
       {
-        const { intervalInMinutes } = message;
-        scheduleFrequentScrape(intervalInMinutes || 30); // Default to 30 minutes if not provided
+        const intervalInMinutes = parseInt(message.frequency, 10);
+        scheduleFrequentScrape(intervalInMinutes);
       }
       break;
     case 'cancelDailyScrape':

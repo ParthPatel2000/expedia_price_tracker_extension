@@ -334,35 +334,27 @@ function SettingsView({
 
                 {/* Navigation Buttons */}
                 <div className="flex gap-3">
-                    <button
-                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black flex justify-center items-center"
-                        onClick={() => setActiveView("properties")}
-                    >
-                        📂 Saved Properties
+                    <button className="btn w-40 bg-gray-100 hover:bg-gray-200 text-black flex items-center justify-center gap-2 min-h-[42px]" onClick={() => setActiveView("properties")}>
+                        <span style={{ display: 'inline-block', lineHeight: 1, verticalAlign: 'middle', fontSize: '1.25rem' }}>📂</span>
+                        <span style={{ lineHeight: 1, verticalAlign: 'middle', fontWeight: 500, fontSize: '0.875rem' }}>Saved Properties</span>
                     </button>
-                    <button
-                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black flex justify-center items-center"
-                        onClick={() => setActiveView("dailyScrape")}
-                    >
-                        🗓️ Daily Scrape
+                    <button className="btn w-40 bg-gray-100 hover:bg-gray-200 text-black flex items-center justify-center gap-2 min-h-[42px]" onClick={() => setActiveView("dailyScrape")}>
+                        <span style={{ display: 'inline-block', lineHeight: 1, verticalAlign: 'middle', fontSize: '1.25rem' }}>🗓️</span>
+                        <span style={{ lineHeight: 1, verticalAlign: 'middle', fontWeight: 500, fontSize: '0.875rem' }}>Daily Scrape</span>
                     </button>
                 </div>
 
-                {/* Auth Controls */}
                 <div className="flex gap-3 mt-3">
-                    <button
-                        className="btn flex-1 bg-yellow-500 hover:bg-yellow-600 text-black flex justify-center items-center"
-                        onClick={() => chrome.runtime.sendMessage({ action: "startGoogleOAuth" })}
-                    >
-                        🔐 Google
+                    <button className="btn w-40 bg-yellow-500 hover:bg-yellow-600 text-black flex items-center justify-center gap-2 min-h-[42px]" onClick={() => chrome.runtime.sendMessage({ action: "startGoogleOAuth" })}>
+                        <span style={{ display: 'inline-block', lineHeight: 1, verticalAlign: 'middle', fontSize: '1.25rem' }}>🔐</span>
+                        <span style={{ lineHeight: 1, verticalAlign: 'middle', fontWeight: 500, fontSize: '0.875rem' }}>Google</span>
                     </button>
-                    <button
-                        className="btn-danger btn flex-1 flex justify-center items-center"
-                        onClick={() => chrome.runtime.sendMessage({ action: "logoutUser" })}
-                    >
-                        🚪 Logout
+                    <button className="btn-danger btn w-40 flex items-center justify-center gap-2 min-h-[42px]" onClick={() => chrome.runtime.sendMessage({ action: "logoutUser" })}>
+                        <span style={{ display: 'inline-block', lineHeight: 1, verticalAlign: 'middle', fontSize: '1.25rem' }}>🚪</span>
+                        <span style={{ lineHeight: 1, verticalAlign: 'middle', fontWeight: 500, fontSize: '0.875rem' }}>Logout</span>
                     </button>
                 </div>
+
 
 
                 {/* Auth State Info */}

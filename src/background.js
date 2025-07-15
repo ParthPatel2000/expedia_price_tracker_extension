@@ -304,7 +304,6 @@ function generateUrls() {
   return props.map(p => updateUrlWithDates(p.url, checkIn, checkOut));
 }
 
-
 async function openTabsAndScrape() {
   const urls = generateUrls();
   if (!urls || urls.length === 0) {
@@ -312,54 +311,64 @@ async function openTabsAndScrape() {
     return;
   }
 
-
   const delay = await new Promise(resolve =>
     chrome.storage.local.get({ pageDelay: 6 }, res => resolve(res.pageDelay * 1000))
   );
 
-  //fetch the scrape config from the remote JSON file
   const config = await getScrapeConfig();
 
-  chrome.storage.local.get({ backgroundTabs: true }, async (result) => {
-    const openInBackground = result.backgroundTabs;
+  // Wrap chrome.storage.local.get in a Promise to await it
+  const result = await new Promise((resolve) => {
+    chrome.storage.local.get({ backgroundTabs: true }, resolve);
+  });
 
-    let tab = await chrome.tabs.create({ url: urls[0], active: !openInBackground });
+  const openInBackground = result.backgroundTabs;
 
-    try {
+  // Create tab and wait for it to open
+  const tab = await new Promise((resolve) => {
+    chrome.tabs.create({ url: urls[0], active: !openInBackground }, resolve);
+  });
 
-      for (let i = 0; i < urls.length; i++) {
-        chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
+  try {
+    for (let i = 0; i < urls.length; i++) {
+      chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
 
-        const url = urls[i];
-        if (i > 0) {
-          await chrome.tabs.update(tab.id, { url });
-        }
-
-        let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
-        await new Promise(r => setTimeout(r, delayMs));
-
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: runScrapingScript,
-            args: [config],
-          });
-        } catch (err) {
-          showStatusMsg("❌ Error executing scraping script: " + err.message, true);
-          error("❌ Error executing scraping script:", err);
-          continue; // Skip to next URL if script fails
-        }
+      const url = urls[i];
+      if (i > 0) {
+        await new Promise((resolve) => {
+          chrome.tabs.update(tab.id, { url }, resolve);
+        });
       }
-    } catch (err) {
-      showStatusMsg("❌ Error during scraping: " + err.message, true);
-      error("❌ Error during scraping:", err);
-    }
 
+      let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
+      await new Promise(r => setTimeout(r, delayMs));
+
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: runScrapingScript,
+          args: [config],
+        });
+      } catch (err) {
+        showStatusMsg("❌ Error executing scraping script: " + err.message, true);
+        error("❌ Error executing scraping script:", err);
+        continue; // Skip to next URL if script fails
+      }
+    }
+  } catch (err) {
+    showStatusMsg("❌ Error during scraping: " + err.message, true);
+    error("❌ Error during scraping:", err);
+  }
+
+  // Wait for tab removal before resolving
+  await new Promise((resolve) => {
     chrome.tabs.remove(tab.id, () => {
       console.log("Tab closed after scraping all properties");
+      resolve();
     });
   });
 }
+
 
 // Listen for the extension icon click to start scraping and send email request
 chrome.action.onClicked.addListener(() => {

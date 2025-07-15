@@ -2,7 +2,108 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Use Tailwind v4 color syntax */
-.test-bg {
-  @apply bg-blue-500 text-white p-4 rounded;
+@layer components {
+  .btn {
+    @apply px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition text-sm;
+  }
+
+  .btn-danger {
+    @apply px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition text-sm;
+  }
+
+  .btn-sm {
+    @apply px-2 py-1 text-sm;
+  }
+
+  .btn-block {
+    @apply w-full;
+  }
+
+  .input {
+    @apply border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+
+  .label {
+    @apply block mb-1 font-medium text-gray-700;
+  }
+
+  .card {
+    @apply bg-white shadow p-4 rounded;
+  }
+
+  .heading-lg {
+    @apply text-2xl font-bold text-gray-900;
+  }
+
+  .heading-md {
+    @apply text-xl font-semibold text-gray-800;
+  }
+
+  .alert {
+    @apply p-3 rounded mb-4 text-sm;
+  }
+
+  .alert-success {
+    @apply bg-green-100 text-green-700;
+  }
+
+  .alert-error {
+    @apply bg-red-100 text-red-700;
+  }
+
+  .alert-info {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  .table-scroll-container {
+    @apply overflow-y-scroll max-h-60 border border-gray-300 rounded;
+
+  }
+
+  .table {
+    @apply w-full border-collapse;
+  }
+
+  .table-header {
+    @apply bg-gray-100 top-0 z-10 border-b border-gray-300 shadow-md;
+  }
+
+  .table-row {
+    @apply hover:bg-gray-50;
+  }
+
+  .table-cell {
+    @apply border border-gray-300 p-2 text-left;
+  }
+
+  .checkbox {
+    @apply form-checkbox h-5 w-5 text-blue-600;
+  }
+
+  .toggle-switch {
+    @apply relative inline-flex items-center cursor-pointer;
+  }
+
+  .toggle-switch input {
+    @apply sr-only;
+  }
+
+  .toggle-slider {
+    @apply w-11 h-6 bg-gray-200 rounded-full dark:bg-gray-700;
+    transition: background-color 0.3s ease;
+  }
+
+  .toggle-slider::before {
+    content: "";
+    @apply absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-300 ease-in-out;
+  }
+
+  input:checked+.toggle-slider {
+    @apply bg-blue-600;
+  }
+
+  input:checked+.toggle-slider::before {
+    @apply translate-x-5;
+  }
+
 }

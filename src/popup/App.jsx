@@ -1,54 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { use, useEffect, useState } from "react";
 import "./tailwind.css";
 
 export default function App() {
     const [activeView, setActiveView] = useState("prices");
-    const [prices, setPrices] = useState({});
-    const [properties, setProperties] = useState([]);
-    const [email, setEmail] = useState("");
-    const [delay, setDelay] = useState(6);
-    const [authState, setAuthState] = useState("anonymous");
-    const [backgroundTabs, setBackgroundTabs] = useState(true);
     const [statusMsg, setStatusMsg] = useState("");
     const [isError, setIsError] = useState(false);
-    const [progress, setProgress] = useState({ current: 0, total: 0 });
-    const [dailyScrape, setDailyScrape] = useState({ enabled: false, time: "11:00", notify: false });
 
     // Load initial state
     useEffect(() => {
-        chrome.storage.local.get(["prices", "propertyLinks", "notificationEmail", "authState", "backgroundTabs", "pageDelay", "dailyScrapeNotificationEnabled", "dailyScrapeTime"], (result) => {
-            setPrices(result.prices || {});
-            setProperties(result.propertyLinks || []);
-            setEmail(result.notificationEmail || "");
-            setAuthState(result.authState || "anonymous");
-            setBackgroundTabs(result.backgroundTabs ?? true);
-            setDelay(result.pageDelay ?? 6);
-            setDailyScrape({
-                enabled: !!result.dailyScrapeTime,
-                time: result.dailyScrapeTime ? `${String(result.dailyScrapeTime.hour).padStart(2, "0")}:${String(result.dailyScrapeTime.minute).padStart(2, "0")}` : "11:00",
-                notify: result.dailyScrapeNotificationEnabled ?? false,
-            });
-        });
         chrome.runtime.sendMessage({ action: "loginAtStartup" });
     }, []);
 
-    // Update on changes
     useEffect(() => {
-        const listener = (changes, area) => {
-            if (area === "local") {
-                if (changes.prices) setPrices(changes.prices.newValue);
-                if (changes.propertyLinks) setProperties(changes.propertyLinks.newValue);
-                if (changes.authState) setAuthState(changes.authState.newValue);
+        const messageListener = (message) => {
+            if (message.action === "showStatusMsg") {
+                showStatusMsg(message.msg, message.isError, message.timeout);
             }
         };
-        chrome.storage.onChanged.addListener(listener);
-        return () => chrome.storage.onChanged.removeListener(listener);
-    }, []);
+        chrome.runtime.onMessage.addListener(messageListener);
+        return () => chrome.runtime.onMessage.removeListener(messageListener);
+    }, [showStatusMsg]);
 
-    // Handle refresh prices button
-    const handleRefresh = () => {
-        chrome.runtime.sendMessage({ action: "startScraping" });
-    };
 
     const showStatusMsg = (msg, error = false, timeout = 3000) => {
         setStatusMsg(msg);
@@ -56,104 +28,24 @@ export default function App() {
         setTimeout(() => setStatusMsg(""), timeout);
     };
 
-    chrome.runtime.onMessage.addListener((message) => {
-        if (message.action === "scrapingProgress") {
-            setProgress({ current: message.current, total: message.total });
-        } else if (message.action === "scrapingDone" || message.action === "scrapingFailed") {
-            setProgress({ current: 0, total: 0 });
-        } else if (message.action === "showStatusMsg") {
-            showStatusMsg(message.msg, message.isError, message.timeout);
-        }
-    });
-
-    const renderPricesTable = () => {
-        if (!prices || Object.keys(prices).length === 0) {
-            return (
-                <tr><td colSpan="3">No prices found. Run the scraper!</td></tr>
-            );
-        }
-        return Object.entries(prices).map(([hotel, data]) => (
-            <tr key={hotel}>
-                <td>{hotel}</td>
-                <td>{data.price}</td>
-                <td>{data.timestamp}</td>
-            </tr>
-        ));
-    };
-
     return (
-        <div className="w-[320px] p-3 font-sans text-sm">
+        <div className="w-[370px] max-h-[400px] p-3 font-sans text-sm">
             {activeView === "prices" && (
-                <div>
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-bold">Hotel Prices</h3>
-                        <button onClick={() => setActiveView("settings")}>⚙️ Settings</button>
-                    </div>
-                    <div className="overflow-y-auto max-h-60 border border-gray-300">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-100">
-                                <tr><th>Hotel</th><th>Price</th><th>Last Updated</th></tr>
-                            </thead>
-                            <tbody>{renderPricesTable()}</tbody>
-                        </table>
-                    </div>
-                    <div className="mt-3 flex justify-between items-center">
-                        <label className="flex items-center">
-                            <input type="checkbox" checked={backgroundTabs} onChange={e => {
-                                setBackgroundTabs(e.target.checked);
-                                chrome.storage.local.set({ backgroundTabs: e.target.checked });
-                            }} />
-                            <span className="ml-2">Open tabs in background</span>
-                        </label>
-                        <button onClick={handleRefresh}>Refresh Prices</button>
-                    </div>
-                    {progress.total > 0 && (
-                        <div className="mt-2 w-full bg-gray-200 rounded">
-                            <div className="h-2 bg-green-500" style={{ width: `${(progress.current / progress.total) * 100}%` }}></div>
-                        </div>
-                    )}
-                    {statusMsg && <p className={`mt-2 ${isError ? "text-red-600" : "text-black"}`}>{statusMsg}</p>}
-                </div>
+                <PricesView
+                    setActiveView={setActiveView}
+                    statusMsg={statusMsg}
+                    isError={isError}
+                    showStatusMsg={showStatusMsg}
+                />
             )}
 
             {activeView === "settings" && (
-                <div>
-                    <div className="mb-2">
-                        <button onClick={() => setActiveView("prices")}>🔙 Back</button>
-                    </div>
-                    <h3 className="font-bold mb-2">Settings</h3>
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                            <label>Page Load Delay (sec):</label>
-                            <input type="number" value={delay} min={1} onChange={e => {
-                                const d = parseInt(e.target.value);
-                                if (!isNaN(d)) {
-                                    setDelay(d);
-                                    chrome.storage.local.set({ pageDelay: d });
-                                    showStatusMsg(`✅ Page delay saved: ${d} sec`);
-                                }
-                            }} className="border px-2 py-1 w-16" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="border px-2 py-1 flex-1" placeholder="Enter email" />
-                            <button onClick={() => {
-                                chrome.storage.local.set({ notificationEmail: email });
-                                showStatusMsg(`✅ Email saved: ${email}`);
-                            }}>Save Email</button>
-                        </div>
-                        <div className="flex gap-2">
-                            <button className="flex-1" onClick={() => setActiveView("properties")}>📂 Saved Properties</button>
-                            <button className="flex-1" onClick={() => setActiveView("dailyScrape")}>🗓️ Daily Scrape</button>
-                        </div>
-                        <div className="flex gap-2">
-                            <button className="flex-1" onClick={() => chrome.runtime.sendMessage({ action: "startGoogleOAuth" })}>🔐 Google</button>
-                            <button className="flex-1" onClick={() => chrome.runtime.sendMessage({ action: "logoutUser" })}>🚪 Logout</button>
-                        </div>
-                        <p className="text-gray-600 text-sm">{authState === "google" ? "✅ Logged in with Google" : "👤 Anonymous user"}</p>
-                        {statusMsg && <p className={`mt-2 ${isError ? "text-red-600" : "text-black"}`}>{statusMsg}</p>}
-                    </div>
-                </div>
-            )}
+                <SettingsView
+                    setActiveView={setActiveView}
+                    showStatusMsg={showStatusMsg}
+                    isError={isError}
+                    statusMsg={statusMsg}
+                />)}
 
             {activeView === 'properties' && (
                 <PropertiesView
@@ -176,24 +68,348 @@ export default function App() {
     );
 }
 
-function PropertiesView({ onBack, statusMsg, isError, showStatusMsg }) {
-    const [properties, setProperties] = React.useState([]);
+// PricesView displays the current hotel prices, allows refreshing, and shows scraping progress/status.
+function PricesView({ setActiveView, statusMsg, isError, showStatusMsg }) {
+    const [prices, setPrices] = useState({});
+    const [progress, setProgress] = useState({ current: 0, total: 0 });
+    const [backgroundTabs, setBackgroundTabs] = useState(true);
 
-    React.useEffect(() => {
+    // Load initial prices and settings
+    useEffect(() => {
+        chrome.storage.local.get(["prices", "backgroundTabs"], (result) => {
+            setPrices(result.prices || {});
+            setBackgroundTabs(result.backgroundTabs ?? true);
+        });
+    }, []);
+
+    // Listen for changes in prices
+    useEffect(() => {
+        const listener = (changes, area) => {
+            if (area === "local" && changes.prices) {
+                setPrices(changes.prices.newValue);
+            }
+        };
+        chrome.storage.onChanged.addListener(listener);
+        return () => chrome.storage.onChanged.removeListener(listener);
+    }, []);
+
+    // The progress bar and status messages
+    useEffect(() => {
+        const messageListener = (message) => {
+            if (message.action === "scrapingProgress") {
+                setProgress({ current: message.current, total: message.total });
+            } else if (message.action === "scrapingDone" || message.action === "scrapingFailed") {
+                setProgress({ current: 0, total: 0 });
+            }
+        };
+        chrome.runtime.onMessage.addListener(messageListener);
+        return () => {
+            chrome.runtime.onMessage.removeListener(messageListener);
+        };
+    }, [showStatusMsg]);
+
+    // Handle refresh prices button
+    const handleRefresh = () => {
+        chrome.runtime.sendMessage({ action: "startScraping" });
+    };
+
+    // Render the prices table
+    const renderPricesTable = () => {
+        if (!prices || Object.keys(prices).length === 0) {
+            return (
+                <tr>
+                    <td colSpan="3" className="p-4 text-center text-gray-500">
+                        No prices found. Run the scraper!
+                    </td>
+                </tr>
+            );
+        }
+        return Object.entries(prices).map(([hotel, data]) => (
+            <tr key={hotel} className="table-row">
+                <td className="table-cell">{hotel}</td>
+                <td className="table-cell">{data.price}</td>
+                <td className="table-cell">{data.timestamp}</td>
+            </tr>
+        ));
+    };
+    return (
+        <div>
+            {/* Dev-only controls */}
+            {process.env.NODE_ENV === "development" && (
+                <div className="flex gap-2 mb-2">
+                    <button
+                        onClick={() => {
+                            chrome.storage.local.remove("prices", () => {
+                                setPrices({});
+                                showStatusMsg("🧹 Cleared all prices");
+                            });
+                        }}
+                        className="btn-danger"
+                    >
+                        🧹 Clear Prices
+                    </button>
+                </div>
+            )}
+
+            <div className="flex justify-between items-center mb-3">
+                <h3 className="heading-lg">Hotel Prices</h3>
+                <button onClick={() => setActiveView("settings")} className="btn">
+                    ⚙️ Settings
+                </button>
+            </div>
+
+            <div className="table-scroll-container">
+                <table className="table">
+                    <thead className="table-header sticky top-0 bg-gray-100">
+                        <tr>
+                            <th className="table-cell">Hotel</th>
+                            <th className="table-cell">Price</th>
+                            <th className="table-cell">Updated At</th>
+                        </tr>
+                    </thead>
+                    <tbody>{renderPricesTable()}</tbody>
+                </table>
+            </div>
+
+            <div className="mt-3 flex justify-between items-center">
+                <label className="flex items-center cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={backgroundTabs}
+                        onChange={(e) => {
+                            setBackgroundTabs(e.target.checked);
+                            chrome.storage.local.set({ backgroundTabs: e.target.checked });
+                        }}
+                        className="checkbox"
+                    />
+                    <span className="ml-2 text-gray-800">Open tabs in background</span>
+                </label>
+
+                <button onClick={handleRefresh} className="btn">
+                    Refresh Prices
+                </button>
+            </div>
+
+            {progress.total > 0 && (
+                <div className="mt-2 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div
+                        className="bg-green-500 h-2 transition-all"
+                        style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    ></div>
+                </div>
+            )}
+
+            {statusMsg && (
+                <p className={`mt-2 font-medium ${isError ? "alert-error" : "alert-success"}`}>
+                    {statusMsg}
+                </p>
+            )}
+        </div>
+
+    );
+}
+
+function SettingsView({
+    setActiveView, showStatusMsg, isError, statusMsg
+}) {
+
+    const [email, setEmail] = useState("");
+    const [delay, setDelay] = useState(6);
+    const [authState, setAuthState] = useState("anonymous");
+
+    useEffect(() => {
+        chrome.storage.local.get(["notificationEmail", "authState", "pageDelay"], (result) => {
+            setEmail(result.notificationEmail || "");
+            setAuthState(result.authState || "anonymous");
+            setDelay(result.pageDelay ?? 6);
+        });
+    }, []);
+
+    useEffect(() => {
+        const listener = (changes, area) => {
+            if (area === "local") {
+                if (changes.notificationEmail) setEmail(changes.notificationEmail.newValue);
+                if (changes.pageDelay) setDelay(changes.pageDelay.newValue);
+                if (changes.authState) setAuthState(changes.authState.newValue);
+            }
+        };
+        chrome.storage.onChanged.addListener(listener);
+        return () => {
+            chrome.storage.onChanged.removeListener(listener);
+        };
+    }, []);
+
+
+    return (
+        <div>
+            {/* Dev Mode Buttons */}
+            {process.env.NODE_ENV === "development" && (
+                <div className="flex gap-2 mb-3">
+                    <button
+                        onClick={() => chrome.runtime.sendMessage({ action: "syncPropertyLinks" })}
+                        className="btn bg-purple-600 hover:bg-purple-700"
+                    >
+                        ⬆️ Sync
+                    </button>
+                    <button
+                        onClick={() => chrome.runtime.sendMessage({ action: "downloadPropertyLinks" })}
+                        className="btn bg-blue-600 hover:bg-blue-700"
+                    >
+                        ⬇️ Download
+                    </button>
+                    <button
+                        onClick={() => chrome.runtime.sendMessage({ action: "testMail" })}
+                        className="btn bg-green-600 hover:bg-green-700"
+                    >
+                        📧 Test Email
+                    </button>
+                </div>
+            )}
+
+            {/* Back Button */}
+            <div className="mb-2">
+                <button
+                    onClick={() => setActiveView("prices")}
+                    className="btn bg-gray-300 hover:bg-gray-400 text-black"
+                >
+                    🔙 Back
+                </button>
+            </div>
+
+            {/* Header */}
+            <h3 className="font-bold text-lg mb-3 text-gray-900">Settings</h3>
+
+            {/* Settings Form */}
+            <div className="space-y-4">
+                {/* Page Delay */}
+                <div className="flex items-center gap-3">
+                    <label className="text-gray-800 font-medium">Page Load Delay (sec):</label>
+                    <input
+                        type="number"
+                        value={delay}
+                        min={1}
+                        onChange={e => {
+                            const d = parseInt(e.target.value);
+                            if (!isNaN(d)) {
+                                setDelay(d);
+                                chrome.storage.local.set({ pageDelay: d });
+                                showStatusMsg(`✅ Page delay saved: ${d} sec`);
+                            }
+                        }}
+                        className="input w-20"
+                    />
+                </div>
+
+                {/* Email Field */}
+                <div className="flex items-center gap-3">
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        className="input flex-1"
+                        placeholder="Enter email"
+                    />
+                    <button
+                        onClick={() => {
+                            chrome.storage.local.set({ notificationEmail: email });
+                            showStatusMsg(`✅ Email saved: ${email}`);
+                        }}
+                        className="btn bg-blue-600 hover:bg-blue-700"
+                    >
+                        Save Email
+                    </button>
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="flex gap-3">
+                    <button
+                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black"
+                        onClick={() => setActiveView("properties")}
+                    >
+                        📂 Saved Properties
+                    </button>
+                    <button
+                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black"
+                        onClick={() => setActiveView("dailyScrape")}
+                    >
+                        🗓️ Daily Scrape
+                    </button>
+                </div>
+
+                {/* Auth Controls */}
+                <div className="flex gap-3">
+                    <button
+                        className="btn flex-1 bg-yellow-500 hover:bg-yellow-600 text-black"
+                        onClick={() => chrome.runtime.sendMessage({ action: "startGoogleOAuth" })}
+                    >
+                        🔐 Google
+                    </button>
+                    <button
+                        className="btn flex-1 bg-red-500 hover:bg-red-600"
+                        onClick={() => chrome.runtime.sendMessage({ action: "logoutUser" })}
+                    >
+                        🚪 Logout
+                    </button>
+                </div>
+
+                {/* Auth State Info */}
+                <p className="text-gray-600 text-sm">
+                    {authState === "google" ? "✅ Logged in with Google" : "👤 Anonymous user"}
+                </p>
+
+                {/* Status Message */}
+                {statusMsg && (
+                    <p className={`mt-2 font-medium ${isError ? "text-red-600" : "text-green-700"}`}>
+                        {statusMsg}
+                    </p>
+                )}
+            </div>
+        </div>
+
+    );
+}
+
+function PropertiesView({ onBack, statusMsg, isError, showStatusMsg }) {
+    const [properties, setProperties] = useState([]);
+
+    useEffect(() => {
         chrome.storage.local.get('propertyLinks', (result) => {
             setProperties(result.propertyLinks || []);
         });
     }, []);
 
-    function removeProperty(url) {
-        chrome.storage.local.get('propertyLinks', (result) => {
-            const updated = (result.propertyLinks || []).filter(p => p.url !== url);
-            chrome.storage.local.set({ propertyLinks: updated }, () => {
-                setProperties(updated);
-                chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
-            });
+    useEffect(() => {
+        const listener = (changes, area) => {
+            if (area === "local" && changes.propertyLinks) {
+                setProperties(changes.propertyLinks.newValue || []);
+            }
+        };
+
+        chrome.storage.onChanged.addListener(listener);
+        return () => {
+            chrome.storage.onChanged.removeListener(listener);
+        };
+    }, []);
+
+    function removeProperty(name) {
+        chrome.storage.local.get(['propertyLinks', 'prices'], (result) => {
+            const updatedProperties = (result.propertyLinks || []).filter(p => p.name !== name);
+
+            const updatedPrices = { ...(result.prices || {}) };
+            if (updatedPrices.hasOwnProperty(name)) {
+                delete updatedPrices[name];
+            }
+
+            chrome.storage.local.set(
+                { propertyLinks: updatedProperties, prices: updatedPrices },
+                () => {
+                    setProperties(updatedProperties);
+                    chrome.runtime.sendMessage({ action: 'syncPropertyLinks' });
+                }
+            );
         });
     }
+
 
     const handleAddLink = () => {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -223,179 +439,206 @@ function PropertiesView({ onBack, statusMsg, isError, showStatusMsg }) {
 
     return (
         <section className="p-3">
-            <div className="flex justify-between mb-3">
-                <button onClick={onBack} className="btn">🔙 Back</button>
-                <button onClick={handleAddLink} className="btn">➕ Add This Property</button>
+            {/* Header Actions */}
+            <div className="flex justify-between items-center mb-3">
+                <button onClick={onBack} className="btn bg-gray-300 hover:bg-gray-400 text-black">
+                    🔙 Back
+                </button>
+                <button onClick={handleAddLink} className="btn bg-blue-600 hover:bg-blue-700">
+                    ➕ Add This Property
+                </button>
             </div>
-            <h3 className="text-lg font-bold mb-2">Saved Properties</h3>
-            <table className="w-full border-collapse border border-gray-300">
+
+            {/* Section Title */}
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Saved Properties</h3>
+
+            {/* Property Table */}
+            <table className="w-full border-collapse border border-gray-300 text-sm">
                 <thead>
-                    <tr className="bg-gray-100">
-                        <th className="border border-gray-300 p-2 text-left">Name</th>
-                        <th className="border border-gray-300 p-2 text-left">Action</th>
+                    <tr className="bg-gray-100 text-left">
+                        <th className="p-2 border border-gray-300">Name</th>
+                        <th className="p-2 border border-gray-300">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {properties.length === 0 ? (
-                        <tr><td colSpan="2" className="p-2 text-center">No properties found.</td></tr>
+                        <tr>
+                            <td colSpan="2" className="p-2 text-center text-gray-500">
+                                No properties found.
+                            </td>
+                        </tr>
                     ) : (
-                        <>
-                            {properties.map((p) => (
-                                <tr key={p.url}>
-                                    <td className="border border-gray-300 p-2">{p.name}</td>
-                                    <td className="border border-gray-300 p-2">
-                                        <button
-                                            onClick={() => removeProperty(p.url)}
-                                            className="text-red-600 hover:underline"
-                                        >
-                                            Remove
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </>
+                        properties.map((p) => (
+                            <tr key={p.url} className="hover:bg-gray-50">
+                                <td className="p-2 border border-gray-300">{p.name}</td>
+                                <td className="p-2 border border-gray-300">
+                                    <button
+                                        onClick={() => removeProperty(p.name)}
+                                        className="text-red-600 hover:underline text-sm"
+                                    >
+                                        Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        ))
                     )}
                 </tbody>
-
             </table>
-            <div className="mt-3">
-                {statusMsg && <p className={`mt-2 ${isError ? "text-red-600" : "text-black"}`}>{statusMsg}</p>}
-            </div>
+
+            {/* Status Message */}
+            {statusMsg && (
+                <div className="mt-3">
+                    <p className={`font-medium ${isError ? "text-red-600" : "text-green-700"}`}>
+                        {statusMsg}
+                    </p>
+                </div>
+            )}
         </section>
     );
 }
 
 function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
-  const [dailyScrapeEnabled, setDailyScrapeEnabled] = React.useState(false);
-  const [dailyScrapeNotificationEnabled, setDailyScrapeNotificationEnabled] = React.useState(false);
-  const [dailyScrapeTime, setDailyScrapeTime] = React.useState('11:00');
+    const [dailyScrapeEnabled, setDailyScrapeEnabled] = React.useState(false);
+    const [dailyScrapeNotificationEnabled, setDailyScrapeNotificationEnabled] = React.useState(false);
+    const [dailyScrapeTime, setDailyScrapeTime] = React.useState('11:00');
 
-  // Load settings on mount
-  React.useEffect(() => {
-    chrome.alarms.get('dailyScrape', (alarm) => {
-      setDailyScrapeEnabled(!!alarm);
-    });
+    // Load settings on mount
+    React.useEffect(() => {
+        chrome.alarms.get('dailyScrape', (alarm) => {
+            setDailyScrapeEnabled(!!alarm);
+        });
 
-    chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
-      setDailyScrapeNotificationEnabled(result.dailyScrapeNotificationEnabled ?? false);
-    });
+        chrome.storage.local.get('dailyScrapeNotificationEnabled', (result) => {
+            setDailyScrapeNotificationEnabled(result.dailyScrapeNotificationEnabled ?? false);
+        });
 
-    chrome.storage.local.get('dailyScrapeTime', (result) => {
-      if (result.dailyScrapeTime) {
-        const hour = String(result.dailyScrapeTime.hour).padStart(2, '0');
-        const minute = String(result.dailyScrapeTime.minute).padStart(2, '0');
-        setDailyScrapeTime(`${hour}:${minute}`);
-      }
-    });
-  }, []);
+        chrome.storage.local.get('dailyScrapeTime', (result) => {
+            if (result.dailyScrapeTime) {
+                const hour = String(result.dailyScrapeTime.hour).padStart(2, '0');
+                const minute = String(result.dailyScrapeTime.minute).padStart(2, '0');
+                setDailyScrapeTime(`${hour}:${minute}`);
+            }
+        });
+    }, []);
 
-  // Handle toggle of daily scrape
-  function handleDailyScrapeToggle(e) {
-    const checked = e.target.checked;
+    // Handle toggle of daily scrape
+    function handleDailyScrapeToggle(e) {
+        const checked = e.target.checked;
 
-    if (checked) {
-      if (!dailyScrapeTime) {
-        showStatusMsg('⛔ Select a time before enabling.', true);
-        setDailyScrapeEnabled(false);
-        return;
-      }
-      const [hour, minute] = dailyScrapeTime.split(':').map(Number);
+        if (checked) {
+            if (!dailyScrapeTime) {
+                showStatusMsg('⛔ Select a time before enabling.', true);
+                setDailyScrapeEnabled(false);
+                return;
+            }
+            const [hour, minute] = dailyScrapeTime.split(':').map(Number);
 
-      chrome.runtime.sendMessage({
-        action: 'scheduleDailyScrape',
-        hour,
-        minute,
-      });
-      showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`);
-    } else {
-      chrome.runtime.sendMessage({ action: 'cancelDailyScrape' });
-      showStatusMsg('🚫 Scrape canceled.');
+            chrome.runtime.sendMessage({
+                action: 'scheduleDailyScrape',
+                hour,
+                minute,
+            });
+            showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`);
+        } else {
+            chrome.runtime.sendMessage({ action: 'cancelDailyScrape' });
+            showStatusMsg('🚫 Scrape canceled.');
+        }
+
+        setDailyScrapeEnabled(checked);
+        chrome.storage.local.set({ dailyScrapeEnabled: checked });
     }
 
-    setDailyScrapeEnabled(checked);
-    chrome.storage.local.set({ dailyScrapeEnabled: checked });
-  }
+    // Handle time change
+    function handleTimeChange(e) {
+        const timeVal = e.target.value;
+        setDailyScrapeTime(timeVal);
 
-  // Handle time change
-  function handleTimeChange(e) {
-    const timeVal = e.target.value;
-    setDailyScrapeTime(timeVal);
+        const [hour, minute] = timeVal.split(':').map(Number);
+        chrome.runtime.sendMessage({
+            action: 'scheduleDailyScrape',
+            hour,
+            minute,
+        });
 
-    const [hour, minute] = timeVal.split(':').map(Number);
-    chrome.runtime.sendMessage({
-      action: 'scheduleDailyScrape',
-      hour,
-      minute,
-    });
+        if (hour === undefined || minute === undefined || isNaN(hour) || isNaN(minute)) {
+            showStatusMsg("⛔ Invalid time format", true);
+            return;
+        }
 
-    showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`);
-    setDailyScrapeEnabled(true);
-  }
+        showStatusMsg(`📅 Scheduled for ${hour}:${minute.toString().padStart(2, '0')}`);
+        setDailyScrapeEnabled(true);
+        chrome.storage.local.set({
+            dailyScrapeEnabled: true,
+        });
+    }
 
-  // Handle email notification toggle
-  function handleNotificationToggle(e) {
-    const checked = e.target.checked;
-    setDailyScrapeNotificationEnabled(checked);
-    chrome.storage.local.set({ dailyScrapeNotificationEnabled: checked });
-    showStatusMsg(`Daily price notification ${checked ? 'enabled' : 'disabled'}`);
-  }
+    // Handle email notification toggle
+    function handleNotificationToggle(e) {
+        const checked = e.target.checked;
+        setDailyScrapeNotificationEnabled(checked);
+        chrome.storage.local.set({ dailyScrapeNotificationEnabled: checked });
+        showStatusMsg(`Daily price notification ${checked ? 'enabled' : 'disabled'}`);
+    }
 
-  return (
-    <section className="p-3">
-      <div className="mb-4">
-        <button onClick={onBack} className="btn">🔙 Back</button>
-      </div>
-      <h3 className="text-lg font-bold mb-4">Daily Scrape Schedule</h3>
+    return (
+        <section className="p-3">
+            <div className="mb-4">
+                <button onClick={onBack} className="btn">🔙 Back</button>
+            </div>
 
-      <div className="mb-4 flex items-center gap-4">
-        <label htmlFor="dailyScrapeTime" className="font-medium">Daily Scrape Time:</label>
-        <input
-          type="time"
-          id="dailyScrapeTime"
-          value={dailyScrapeTime}
-          onChange={handleTimeChange}
-          className="border border-gray-300 rounded px-2 py-1"
-          style={{ width: '100px' }}
-        />
-      </div>
+            <h3 className="text-lg font-bold mb-4">Daily Scrape Schedule</h3>
 
-      <div className="mb-4 flex justify-between items-center">
-        <label htmlFor="dailyScrapeSwitch" className="font-medium">
-          Enable Daily Scrape
-        </label>
-        <input
-          id="dailyScrapeSwitch"
-          type="checkbox"
-          checked={dailyScrapeEnabled}
-          onChange={handleDailyScrapeToggle}
-          className="toggle-checkbox"
-        />
-      </div>
+            <div className="mb-4 flex items-center gap-4">
+                <label htmlFor="dailyScrapeTime" className="label">Daily Scrape Time:</label>
+                <input
+                    type="time"
+                    id="dailyScrapeTime"
+                    value={dailyScrapeTime}
+                    onChange={handleTimeChange}
+                    className="input"
+                    style={{ width: '120px' }}
+                />
+            </div>
 
-      <div className="mb-4 flex justify-between items-center">
-        <label htmlFor="dailyScrapeNotificationSwitch" className="font-medium">
-          Send Email Notifications
-        </label>
-        <input
-          id="dailyScrapeNotificationSwitch"
-          type="checkbox"
-          checked={dailyScrapeNotificationEnabled}
-          onChange={handleNotificationToggle}
-          className="toggle-checkbox"
-        />
-      </div>
+            <div className="mb-4 flex justify-between items-center">
+                <label htmlFor="dailyScrapeSwitch" className="label">
+                    Enable Daily Scrape
+                </label>
+                <label className="toggle-switch" htmlFor="dailyScrapeSwitch">
+                    <input
+                        id="dailyScrapeSwitch"
+                        type="checkbox"
+                        checked={dailyScrapeEnabled}
+                        onChange={handleDailyScrapeToggle}
+                    />
+                    <span className="toggle-slider"></span>
+                </label>
 
-      {statusMsg && (
-        <div
-          className={`mt-4 p-2 rounded ${
-            isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-          }`}
-        >
-          {statusMsg}
-        </div>
-      )}
-    </section>
-  );
+            </div>
+
+            <div className="mb-4 flex justify-between items-center">
+                <label htmlFor="dailyScrapeNotificationSwitch" className="label">
+                    Send Email Notifications
+                </label>
+                <label className="toggle-switch" htmlFor="dailyScrapeNotificationSwitch">
+                    <input
+                        id="dailyScrapeNotificationSwitch"
+                        type="checkbox"
+                        checked={dailyScrapeNotificationEnabled}
+                        onChange={handleNotificationToggle}
+                    />
+                    <span className="toggle-slider"></span>
+                </label>
+            </div>
+
+            {statusMsg && (
+                <div className={isError ? 'status-error' : 'status-success'}>
+                    {statusMsg}
+                </div>
+            )}
+        </section>
+
+    );
 }
 
 

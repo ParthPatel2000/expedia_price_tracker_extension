@@ -29,7 +29,7 @@ export default function App() {
     };
 
     return (
-        <div className="w-[370px] max-h-[400px] p-3 font-sans text-sm">
+        <div className="w-[370px] p-3 font-sans text-sm">
             {activeView === "prices" && (
                 <PricesView
                     setActiveView={setActiveView}
@@ -71,14 +71,17 @@ export default function App() {
 // PricesView displays the current hotel prices, allows refreshing, and shows scraping progress/status.
 function PricesView({ setActiveView, statusMsg, isError, showStatusMsg }) {
     const [prices, setPrices] = useState({});
-    const [progress, setProgress] = useState({ current: 0, total: 0 });
     const [backgroundTabs, setBackgroundTabs] = useState(true);
+    const [progress, setProgress] = useState({ current: 0, total: 0 });
+    const [isScraping, setIsScraping] = useState(false);
 
     // Load initial prices and settings
     useEffect(() => {
-        chrome.storage.local.get(["prices", "backgroundTabs"], (result) => {
+        chrome.storage.local.get(["prices", "backgroundTabs", "scrapeProgress", "isScraping"], (result) => {
             setPrices(result.prices || {});
             setBackgroundTabs(result.backgroundTabs ?? true);
+            setProgress(result.scrapeProgress ?? { current: 0, total: 0 });
+            setIsScraping(result.isScraping ?? false);
         });
     }, []);
 
@@ -88,18 +91,22 @@ function PricesView({ setActiveView, statusMsg, isError, showStatusMsg }) {
             if (area === "local" && changes.prices) {
                 setPrices(changes.prices.newValue);
             }
+            if (area === 'local' && changes.scrapeProgress) {
+                setProgress(changes.scrapeProgress.newValue);
+            }
+            if (area === 'local' && changes.isScraping) {
+                setIsScraping(changes.isScraping.newValue);
+            }
         };
         chrome.storage.onChanged.addListener(listener);
         return () => chrome.storage.onChanged.removeListener(listener);
     }, []);
 
-    // The progress bar and status messages
+    //status messages
     useEffect(() => {
         const messageListener = (message) => {
-            if (message.action === "scrapingProgress") {
-                setProgress({ current: message.current, total: message.total });
-            } else if (message.action === "scrapingDone" || message.action === "scrapingFailed") {
-                setProgress({ current: 0, total: 0 });
+            if (message.action === "scrapingDone" || message.action === "scrapingFailed") {
+                showStatusMsg(message.action === "scrapingFailed" ? "❌ Scraping failed" : "✅ Scraping completed");
             }
         };
         chrome.runtime.onMessage.addListener(messageListener);
@@ -185,19 +192,24 @@ function PricesView({ setActiveView, statusMsg, isError, showStatusMsg }) {
                     <span className="ml-2 text-gray-800">Open tabs in background</span>
                 </label>
 
-                <button onClick={handleRefresh} className="btn">
-                    Refresh Prices
+                {/* Refresh Prices Button */}
+                <button
+                    onClick={handleRefresh}
+                    disabled={isScraping}
+                    className="relative overflow-hidden btn hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                    {/* Progress fill */}
+                    {progress.total > 0 && (
+                        <div
+                            className="absolute left-0 top-0 h-full bg-green-500 opacity-80 transition-[width] duration-300 ease-linear"
+                            style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                        />
+                    )}
+
+                    {/* Button text */}
+                    <span className="relative z-10">Refresh Prices</span>
                 </button>
             </div>
-
-            {progress.total > 0 && (
-                <div className="mt-2 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                    <div
-                        className="bg-green-500 h-2 transition-all"
-                        style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                    ></div>
-                </div>
-            )}
 
             {statusMsg && (
                 <p className={`mt-2 font-medium ${isError ? "alert-error" : "alert-success"}`}>
@@ -253,7 +265,7 @@ function SettingsView({
                     </button>
                     <button
                         onClick={() => chrome.runtime.sendMessage({ action: "downloadPropertyLinks" })}
-                        className="btn bg-blue-600 hover:bg-blue-700"
+                        className="btn"
                     >
                         ⬇️ Download
                     </button>
@@ -277,13 +289,13 @@ function SettingsView({
             </div>
 
             {/* Header */}
-            <h3 className="font-bold text-lg mb-3 text-gray-900">Settings</h3>
+            <h3 className="heading-md mb-3">Settings</h3>
 
             {/* Settings Form */}
             <div className="space-y-4">
                 {/* Page Delay */}
                 <div className="flex items-center gap-3">
-                    <label className="text-gray-800 font-medium">Page Load Delay (sec):</label>
+                    <label className="label">Page Load Delay (sec):</label>
                     <input
                         type="number"
                         value={delay}
@@ -314,7 +326,7 @@ function SettingsView({
                             chrome.storage.local.set({ notificationEmail: email });
                             showStatusMsg(`✅ Email saved: ${email}`);
                         }}
-                        className="btn bg-blue-600 hover:bg-blue-700"
+                        className="btn"
                     >
                         Save Email
                     </button>
@@ -323,13 +335,13 @@ function SettingsView({
                 {/* Navigation Buttons */}
                 <div className="flex gap-3">
                     <button
-                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black"
+                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black flex justify-center items-center"
                         onClick={() => setActiveView("properties")}
                     >
                         📂 Saved Properties
                     </button>
                     <button
-                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black"
+                        className="btn flex-1 bg-gray-100 hover:bg-gray-200 text-black flex justify-center items-center"
                         onClick={() => setActiveView("dailyScrape")}
                     >
                         🗓️ Daily Scrape
@@ -337,20 +349,21 @@ function SettingsView({
                 </div>
 
                 {/* Auth Controls */}
-                <div className="flex gap-3">
+                <div className="flex gap-3 mt-3">
                     <button
-                        className="btn flex-1 bg-yellow-500 hover:bg-yellow-600 text-black"
+                        className="btn flex-1 bg-yellow-500 hover:bg-yellow-600 text-black flex justify-center items-center"
                         onClick={() => chrome.runtime.sendMessage({ action: "startGoogleOAuth" })}
                     >
                         🔐 Google
                     </button>
                     <button
-                        className="btn flex-1 bg-red-500 hover:bg-red-600"
+                        className="btn-danger btn flex-1 flex justify-center items-center"
                         onClick={() => chrome.runtime.sendMessage({ action: "logoutUser" })}
                     >
                         🚪 Logout
                     </button>
                 </div>
+
 
                 {/* Auth State Info */}
                 <p className="text-gray-600 text-sm">
@@ -359,12 +372,13 @@ function SettingsView({
 
                 {/* Status Message */}
                 {statusMsg && (
-                    <p className={`mt-2 font-medium ${isError ? "text-red-600" : "text-green-700"}`}>
+                    <div className={`alert ${isError ? "alert-error" : "alert-success"}`}>
                         {statusMsg}
-                    </p>
+                    </div>
                 )}
             </div>
         </div>
+
 
     );
 }
@@ -444,56 +458,59 @@ function PropertiesView({ onBack, statusMsg, isError, showStatusMsg }) {
                 <button onClick={onBack} className="btn bg-gray-300 hover:bg-gray-400 text-black">
                     🔙 Back
                 </button>
-                <button onClick={handleAddLink} className="btn bg-blue-600 hover:bg-blue-700">
+                <button onClick={handleAddLink} className="btn">
                     ➕ Add This Property
                 </button>
             </div>
 
             {/* Section Title */}
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Saved Properties</h3>
+            <h3 className="heading-md mb-2">Saved Properties</h3>
 
             {/* Property Table */}
-            <table className="w-full border-collapse border border-gray-300 text-sm">
-                <thead>
-                    <tr className="bg-gray-100 text-left">
-                        <th className="p-2 border border-gray-300">Name</th>
-                        <th className="p-2 border border-gray-300">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {properties.length === 0 ? (
+            <div className="table-scroll-container">
+                <table className="table">
+                    <thead className="table-header">
                         <tr>
-                            <td colSpan="2" className="p-2 text-center text-gray-500">
-                                No properties found.
-                            </td>
+                            <th className="table-cell">Name</th>
+                            <th className="table-cell">Action</th>
                         </tr>
-                    ) : (
-                        properties.map((p) => (
-                            <tr key={p.url} className="hover:bg-gray-50">
-                                <td className="p-2 border border-gray-300">{p.name}</td>
-                                <td className="p-2 border border-gray-300">
-                                    <button
-                                        onClick={() => removeProperty(p.name)}
-                                        className="text-red-600 hover:underline text-sm"
-                                    >
-                                        Remove
-                                    </button>
+                    </thead>
+                    <tbody>
+                        {properties.length === 0 ? (
+                            <tr>
+                                <td colSpan="2" className="table-cell text-center text-gray-500">
+                                    No properties found.
                                 </td>
                             </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
+                        ) : (
+                            properties.map((p) => (
+                                <tr key={p.url} className="table-row">
+                                    <td className="table-cell">{p.name}</td>
+                                    <td className="table-cell">
+                                        <button
+                                            onClick={() => removeProperty(p.name)}
+                                            className="text-red-600 hover:underline text-sm"
+                                        >
+                                            Remove
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
 
             {/* Status Message */}
             {statusMsg && (
                 <div className="mt-3">
-                    <p className={`font-medium ${isError ? "text-red-600" : "text-green-700"}`}>
+                    <div className={`alert ${isError ? "alert-error" : "alert-success"}`}>
                         {statusMsg}
-                    </p>
+                    </div>
                 </div>
             )}
         </section>
+
     );
 }
 
@@ -582,24 +599,29 @@ function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
 
     return (
         <section className="p-3">
+            {/* Back Button */}
             <div className="mb-4">
                 <button onClick={onBack} className="btn">🔙 Back</button>
             </div>
 
-            <h3 className="text-lg font-bold mb-4">Daily Scrape Schedule</h3>
+            {/* Title */}
+            <h3 className="heading-md mb-4">Daily Scrape Schedule</h3>
 
+            {/* Scrape Time */}
             <div className="mb-4 flex items-center gap-4">
-                <label htmlFor="dailyScrapeTime" className="label">Daily Scrape Time:</label>
+                <label htmlFor="dailyScrapeTime" className="label">
+                    Daily Scrape Time:
+                </label>
                 <input
                     type="time"
                     id="dailyScrapeTime"
                     value={dailyScrapeTime}
                     onChange={handleTimeChange}
-                    className="input"
-                    style={{ width: '120px' }}
+                    className="input w-32"
                 />
             </div>
 
+            {/* Daily Scrape Toggle */}
             <div className="mb-4 flex justify-between items-center">
                 <label htmlFor="dailyScrapeSwitch" className="label">
                     Enable Daily Scrape
@@ -613,9 +635,9 @@ function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
                     />
                     <span className="toggle-slider"></span>
                 </label>
-
             </div>
 
+            {/* Notification Toggle */}
             <div className="mb-4 flex justify-between items-center">
                 <label htmlFor="dailyScrapeNotificationSwitch" className="label">
                     Send Email Notifications
@@ -631,8 +653,9 @@ function DailyScrapeView({ onBack, statusMsg, isError, showStatusMsg }) {
                 </label>
             </div>
 
+            {/* Status Message */}
             {statusMsg && (
-                <div className={isError ? 'status-error' : 'status-success'}>
+                <div className={`alert mt-2 ${isError ? "alert-error" : "alert-success"}`}>
                     {statusMsg}
                 </div>
             )}

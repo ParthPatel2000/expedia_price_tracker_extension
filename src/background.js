@@ -46,14 +46,6 @@ function syncPropertyLinksToFirestore() {
 }
 
 
-//cannot remove this listener as it is used to sync property links 
-// after the user removes a property link from the popup
-// Listen for messages from popup or content scripts to sync property links
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'syncPropertyLinks') {
-    syncPropertyLinksToFirestore();
-  }
-});
 
 
 // Function to download property links from Firestore to Chrome storage
@@ -79,13 +71,7 @@ function downloadPropertyLinksFromFirestore() {
   });
 }
 
-// we will keep this listner but only remove the button from the popup
-// Listen for messages from popup or content scripts
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'downloadPropertyLinks') {
-    downloadPropertyLinksFromFirestore();
-  }
-});
+
 
 
 //function to change user's authentication state
@@ -177,27 +163,7 @@ function launchGoogleOAuth() {
 }
 
 
-// Function to log out the user
-// This will clear the local storage and Firestore data
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'logoutUser') {
-    signOut(auth)
-      .then(() => {
-        log("👋 User signed out successfully.");
-        chrome.storage.local.remove(['propertyLinks', 'prices', 'isPrimed', 'notificationEmail'], () => {
-          log("✅ Cleared propertyLinks from local storage.");
-        });
-        // Optionally sign in anonymously again
-        return signInAnonymously(auth);
-      })
-      .then(() => {
-        log("🔄 Reverted to anonymous user after logout.");
-      })
-      .catch((error) => {
-        error("❌ Sign-out error:", error);
-      });
-  }
-});
+
 
 // <--------------------------------------End of Firebase Setup-------------------------------------------------->
 
@@ -233,13 +199,6 @@ function loginAtStartup() {
 
 
 //listener for the call from popup.js to start the login process
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'loginAtStartup') {
-    loginAtStartup();  // your function can be async if needed
-    // return true; // ✅ Keeps the message channel open for async operations
-  }
-});
-
 
 
 
@@ -331,7 +290,10 @@ async function openTabsAndScrape() {
 
   try {
     for (let i = 0; i < urls.length; i++) {
-      chrome.runtime.sendMessage({ action: 'scrapingProgress', current: i + 1, total: urls.length });
+      chrome.storage.local.set({
+        scrapeProgress: { current: i + 1, total: urls.length },
+        isScraping: true
+      });
 
       const url = urls[i];
       if (i > 0) {
@@ -349,31 +311,43 @@ async function openTabsAndScrape() {
           func: runScrapingScript,
           args: [config],
         });
-      } catch (err) {
-        showStatusMsg("❌ Error executing scraping script: " + err.message, true);
-        error("❌ Error executing scraping script:", err);
-        continue; // Skip to next URL if script fails
+      }
+      catch (err) {
+        if (err.message.includes("No tab with id")) {
+          showStatusMsg("⚠️ tab closed unexpectedly.", true);
+          error("⚠️ Tab closed unexpectedly while scraping:", err);
+          chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: "⚠️ Tab closed unexpectedly" });
+          break; // Exit loop if tab is closed
+        } else {
+          showStatusMsg("❌ Error executing scraping script: " + err.message, true);
+          error("❌ Error executing scraping script:", err);
+          chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: err.message });
+          continue; // Skip to next URL if script fails
+        }
       }
     }
   } catch (err) {
     showStatusMsg("❌ Error during scraping: " + err.message, true);
     error("❌ Error during scraping:", err);
+    chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: err.message });
+
+  }
+  finally {
+    // Wait for tab removal before resolving
+    chrome.storage.local.set({
+      scrapeProgress: { current: 0, total: 0 },
+      isScraping: false
+    });
+    await new Promise((resolve) => {
+      chrome.tabs.remove(tab.id, () => {
+        console.log("Tab closed after scraping all properties");
+        resolve();
+      });
+    });
   }
 
-  // Wait for tab removal before resolving
-  await new Promise((resolve) => {
-    chrome.tabs.remove(tab.id, () => {
-      console.log("Tab closed after scraping all properties");
-      resolve();
-    });
-  });
+
 }
-
-
-// Listen for the extension icon click to start scraping and send email request
-chrome.action.onClicked.addListener(() => {
-  openTabsAndScrape();
-});
 
 async function getScrapeConfig() {
   const configUrl = 'https://parthpatel2000.github.io/configs/expedia_config.json';
@@ -389,103 +363,74 @@ async function getScrapeConfig() {
     const config = await response.json();
 
     log('✅ Fetched config:', config);
-    
+
     return config;
   } catch (err) {
     console.warn('⚠️ Using default config due to fetch error:', err);
     return defaultConfig;
-  }  
-}  
+  }
+}
 
 
 //The scraping script for extracting price from HTML.
 function runScrapingScript(config) {
-  var getFirstMatchingElement = function(selectors, filterFn) {
-    filterFn = filterFn || function() { return true; };
+  var getFirstMatchingElement = function (selectors, filterFn) {
+    filterFn = filterFn || function () { return true; };
     for (var i = 0; i < selectors.length; i++) {
       var selector = selectors[i];
       var elements = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(filterFn);
       if (elements.length > 0) return elements[0];
-    }  
+    }
     return null;
-  };  
+  };
 
   var price = '';
 
   var soldOutSelectors = config.soldOutSelectors || (config.soldOutSelector ? [config.soldOutSelector] : []);
   var soldOutElement = getFirstMatchingElement(
     soldOutSelectors,
-    function(el) { return el.textContent.toLowerCase().indexOf('sold out') !== -1; }
-  );  
+    function (el) { return el.textContent.toLowerCase().indexOf('sold out') !== -1; }
+  );
 
   if (soldOutElement) {
     price = 'Sold Out';
   } else {
-    var keywords = (config.priceKeywords && config.priceKeywords.map(function(k) { return k.toLowerCase(); })) || ['nightly', '$'];
+    var keywords = (config.priceKeywords && config.priceKeywords.map(function (k) { return k.toLowerCase(); })) || ['nightly', '$'];
     var priceSelectors = config.priceSelectors || (config.priceSelector ? [config.priceSelector] : []);
     var priceElement = getFirstMatchingElement(
       priceSelectors,
-      function(el) {
+      function (el) {
         var text = el.textContent.toLowerCase();
-        return keywords.some(function(keyword) { return text.indexOf(keyword) !== -1; });
-      }  
-    );  
+        return keywords.some(function (keyword) { return text.indexOf(keyword) !== -1; });
+      }
+    );
 
     if (priceElement) {
       price = priceElement.textContent;
-      keywords.forEach(function(keyword) {
+      keywords.forEach(function (keyword) {
         var regex = new RegExp(keyword, 'gi');
         price = price.replace(regex, '');
-      });  
+      });
       price = price.trim();
     } else {
       price = 'Price not found';
-    }  
-  }  
+    }
+  }
 
   var params = new URLSearchParams(window.location.search);
   var hotelName = params.get('hotelName') || 'Unknown Hotel';
 
   console.log('💾 Stored/updated price for ' + hotelName + ':', price);
-  chrome.runtime.sendMessage({ price: price, hotelName: hotelName });
-}  
+  chrome.runtime.sendMessage({ action: "storePrice", price: price, hotelName: hotelName });
+}
 
 
 
 
-//listen for Google OAuth login request
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'startGoogleOAuth') {
-    launchGoogleOAuth();
-  }
-});
 
 // main scraping and storage logic
 chrome.runtime.onMessage.addListener((message) => {
-  log(`📩 Received price for ${message.hotelName}: ${message.price}`);
 
-  if (message.action === 'startScraping') {
-    openTabsAndScrape();
-  }
-
-  if (message.hotelName && message.price) {
-    chrome.storage.local.get({ prices: {} }, (result) => {
-      const prices = result.prices;
-
-      prices[message.hotelName] = {
-        price: message.price,
-        timestamp: new Date().toLocaleString() // Store as local date string for easier readability 
-
-        // timestamp: new Date().toISOString()  // will use this if i turn this into a price tracker
-        // For now, we will store the timestamp as a local date string for easier readability 
-        // will need to change the popup.js to use this format
-      };
-
-      chrome.storage.local.set({ prices }, () => {
-        log(`💾 Stored/updated price for ${message.hotelName}:`, prices[message.hotelName]);
-      });
-    });
-  }
 });
 
 
@@ -525,13 +470,6 @@ async function sendEmailRequest(requestData) {
 }
 
 
-
-// Listen for Send Email button click in popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'sendEmailRequest') {
-    sendEmailRequest(message.requestData);
-  }
-});
 
 
 
@@ -586,41 +524,105 @@ function scheduleDailyScrape(hour = 11, minute = 10) {
   });
 }
 
-//listen for the scheduleDailyScrape message from popup.js
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'scheduleDailyScrape') {
-    const { hour, minute } = message;
-    scheduleDailyScrape(hour, minute);
-  }
-});
 
-//listen for the  cancelDailyScrape message to cancel the alarm
+//wrapper function for the showStatusMsg function in popup.js
+// This function sends a message to the popup to show a status message
+function showStatusMsg(msg, isError = false, timeout = 3000) {
+  chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError, timeout });
+}
+
+// <--------------------------------------Listeners------------------------------------------------------>
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'cancelDailyScrape') {
-    chrome.alarms.get('dailyScrape', (alarm) => {
-      if (!alarm) {
-        showStatusMsg("⚠️ No daily scrape alarm exists.", true);
-        console.log("⚠️ No alarm named 'dailyScrape' found.");
-      } else {
-        chrome.alarms.clear('dailyScrape', () => {
-          // Recheck just to confirm it's gone
-          chrome.alarms.get('dailyScrape', (afterClear) => {
-            if (!afterClear) {
-              showStatusMsg("✅ Daily scrape alarm cancelled.", false);
-              console.log("✅ Alarm 'dailyScrape' cleared.");
-            } else {
-              showStatusMsg("❌ Failed to cancel daily scrape alarm.", true);
-              console.log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
-            }
+  switch (message.action) {
+    case 'syncPropertyLinks':
+      syncPropertyLinksToFirestore();
+      break;
+    case 'downloadPropertyLinks':
+      downloadPropertyLinksFromFirestore();
+      break;
+    case 'loginAtStartup':
+      loginAtStartup();
+      break;
+    case 'startGoogleOAuth':
+      launchGoogleOAuth();
+      break;
+    case 'sendEmailRequest':
+      sendEmailRequest(message.requestData);
+      break;
+    case 'startScraping':
+      openTabsAndScrape();
+      break;
+    case 'logoutUser':
+      signOut(auth)
+        .then(() => {
+          log("👋 User signed out successfully.");
+          chrome.storage.local.remove(['propertyLinks', 'prices', 'isPrimed', 'notificationEmail'], () => {
+            log("✅ Cleared propertyLinks from local storage.");
+          });
+          // Optionally sign in anonymously again
+          return signInAnonymously(auth);
+        })
+        .then(() => {
+          log("🔄 Reverted to anonymous user after logout.");
+        })
+        .catch((error) => {
+          error("❌ Sign-out error:", error);
+        });
+      break;
+    case 'scheduleDailyScrape':
+      const { hour, minute } = message;
+      scheduleDailyScrape(hour, minute);
+      break;
+    case 'cancelDailyScrape':
+      chrome.alarms.get('dailyScrape', (alarm) => {
+        if (!alarm) {
+          showStatusMsg("⚠️ No daily scrape alarm exists.", true);
+          console.log("⚠️ No alarm named 'dailyScrape' found.");
+        } else {
+          chrome.alarms.clear('dailyScrape', () => {
+            // Recheck just to confirm it's gone
+            chrome.alarms.get('dailyScrape', (afterClear) => {
+              if (!afterClear) {
+                showStatusMsg("✅ Daily scrape alarm cancelled.", false);
+                console.log("✅ Alarm 'dailyScrape' cleared.");
+              } else {
+                showStatusMsg("❌ Failed to cancel daily scrape alarm.", true);
+                console.log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
+              }
+            });
+          });
+        }
+      });
+      break;
+    case "storePrice":
+      if (message.hotelName && message.price) {
+        chrome.storage.local.get({ prices: {} }, (result) => {
+          const prices = result.prices;
+
+          prices[message.hotelName] = {
+            price: message.price,
+            timestamp: new Date().toLocaleString() // Store as local date string for easier readability 
+
+            // timestamp: new Date().toISOString()  // will use this if i turn this into a price tracker
+            // For now, we will store the timestamp as a local date string for easier readability 
+            // will need to change the popup.js to use this format
+          };
+
+          chrome.storage.local.set({ prices }, () => {
+            log(`💾 Stored/updated price for ${message.hotelName}:`, prices[message.hotelName]);
           });
         });
       }
-    });
+      break;
+    default:
+      warn("⚠️ Unknown action received:", message.action);
+      showStatusMsg("⚠️ Unknown action: " + message.action, true);
+      break;
   }
 });
 
 // Dev Only 
-
 if (isDev) {
   function testMail() {
     const testData = {
@@ -631,7 +633,6 @@ if (isDev) {
     };
     sendEmailRequest(testData);
   }
-
   // Listen for a test message to trigger email sending
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'testMail') {
@@ -642,11 +643,5 @@ if (isDev) {
   log("🔧 Dev mode enabled: Test email functionality is active.");
 }
 
-
-//wrapper function for the showStatusMsg function in popup.js
-// This function sends a message to the popup to show a status message
-function showStatusMsg(msg, isError = false, timeout = 3000) {
-  chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError, timeout });
-}
 
 //<--------------------------------------End of background.js-------------------------------------------------->

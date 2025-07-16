@@ -2,6 +2,7 @@ const path = require('path');
 const CopyPlugin = require('copy-webpack-plugin');
 const webpack = require('webpack');
 const Dotenv = require('dotenv-webpack');
+const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = (env, argv) => {
     const isDev = argv.mode === 'development';
@@ -59,6 +60,21 @@ module.exports = (env, argv) => {
                     test: /\.(png|svg|jpg|jpeg|gif)$/i,
                     type: 'asset/resource',
                 },
+            ],
+        },
+        optimization: {
+            minimize: !isDev,
+            minimizer: [
+                new TerserPlugin({
+                    terserOptions: {
+                        compress: true,
+                        mangle: false, // <-- this is important for Manifest V3
+                        format: {
+                            comments: false,
+                        },
+                    },
+                    extractComments: false,
+                }),
             ],
         },
         experiments: {

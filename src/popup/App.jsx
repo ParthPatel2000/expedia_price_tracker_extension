@@ -31,8 +31,6 @@ export default function App() {
         return () => chrome.runtime.onMessage.removeListener(messageListener);
     }, [showStatusMsg]);
 
-
-
     return (
         <div className="w-[370px] p-3 font-sans text-sm">
             {activeView === "prices" && (

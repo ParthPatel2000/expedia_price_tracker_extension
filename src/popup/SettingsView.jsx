@@ -40,20 +40,30 @@ export default function SettingsView({
                     <button
                         onClick={() => chrome.runtime.sendMessage({ action: "syncPropertyLinks" })}
                         className="btn bg-purple-600 hover:bg-purple-700"
+                        title="Sync Property Links to Firebase"
                     >
-                        ⬆️ Sync
+                        ⬆️
                     </button>
                     <button
                         onClick={() => chrome.runtime.sendMessage({ action: "downloadPropertyLinks" })}
                         className="btn"
+                        title="Download Property Links from Firebase"
                     >
-                        ⬇️ Download
+                        ⬇️
                     </button>
                     <button
                         onClick={() => chrome.runtime.sendMessage({ action: "testMail" })}
                         className="btn bg-green-600 hover:bg-green-700"
+                        title="Send Test Email"
                     >
-                        📧 Test Email
+                        📧
+                    </button>
+                    <button
+                        onClick={() => chrome.runtime.sendMessage({ action: "getSummaryPrices" })}
+                        className="btn bg-blue-600 hover:bg-blue-700 hover:text-white"
+                        title="Get Summary Prices"
+                    >
+                        📊
                     </button>
                 </div>
             )}

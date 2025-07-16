@@ -228,6 +228,7 @@ function loginAtStartup() {
 
 // <------------------------------------------Scraping logic--------------------------------------------------->
 let props = []; // Global variable to hold properties loaded from storage
+let agent_ = 'auto'; // Default agent for scraping
 
 chrome.storage.local.get('propertyLinks', (result) => {
   if (Array.isArray(result.propertyLinks)) {
@@ -367,10 +368,12 @@ async function openTabsAndScrape_() {
       }, resolve);
     });
 
+    // Update last run time only if no errors occurred
     if (!anyError) {
       await new Promise((resolve) => {
         chrome.storage.local.set({ lastrun: new Date().toISOString() }, resolve);
       });
+      log("✅ Scraping completed successfully for all properties.");
     }
 
     // Close the tab after scraping is complete
@@ -384,7 +387,7 @@ async function openTabsAndScrape_() {
 
 }
 
-async function openTabsAndScrape({ waitIfBusy = false } = {}) {
+async function openTabsAndScrape({ waitIfBusy = false, agent = 'auto' } = {}) {
   const getIsScraping = () =>
     new Promise((resolve) =>
       chrome.storage.local.get({ isScraping: false }, (res) => resolve(res.isScraping))
@@ -400,9 +403,10 @@ async function openTabsAndScrape({ waitIfBusy = false } = {}) {
   // Check if last run was within the last 5 minutes
   if (lastRun) {
     const minutesSince = (Date.now() - new Date(lastRun)) / 1000 / 60;
-    if (minutesSince < 5) { // 5 minutes
+    const waittime = 0.1; // 5 minutes
+    if (minutesSince < waittime) { // 5 minutes
       log(`🛑 Skipping scrape — last one was just ${minutesSince.toFixed(1)} min ago.`);
-      showStatusMsg(`🛑 Skipping scrape — last one was just ${minutesSince.toFixed(1)} min ago.`, true);
+      showStatusMsg(`🛑 Skipping scrape — wait ${waittime - minutesSince.toFixed(1)} mins.`, true);
       return;
     }
   }
@@ -423,6 +427,7 @@ async function openTabsAndScrape({ waitIfBusy = false } = {}) {
 
   try {
     await setIsScraping(true);
+    agent_ = agent; // Update global agent variable for the price snapshot function
     await openTabsAndScrape_();
   } catch (err) {
     console.error("❌ Error inside scrape lock wrapper:", err);
@@ -525,12 +530,133 @@ function storePrice(hotelName, price) {
     chrome.storage.local.set({ prices }, () => {
       log(`💾 Stored/updated price for ${hotelName}:`, prices[hotelName]);
     });
+
+    addPriceSnapshot(hotelName, price, 'USD', agent_).catch(err => {
+      error("❌ Error adding price snapshot:", err);
+    });
   });
+}
+// Key used in chrome.storage.local
+const STORAGE_KEY = "priceHistoryBuffer";
+
+async function addPriceSnapshot(hotelName, price, currency = 'USD', source = 'auto') {
+  const data = await chrome.storage.local.get(STORAGE_KEY);
+  const priceHistory = data[STORAGE_KEY] || {};
+
+  if (!priceHistory[hotelName]) {
+    priceHistory[hotelName] = [];
+  }
+
+  priceHistory[hotelName].push({
+    price,
+    currency,
+    source,
+    timestamp: new Date().toISOString()
+  });
+
+  await chrome.storage.local.set({ [STORAGE_KEY]: priceHistory }, () => {
+    log(`💾 Added price snapshot for ${hotelName}:`, { price, currency, source });
+  });
+}
+
+const getPriceBuffer = () =>
+  new Promise(resolve => {
+    chrome.storage.local.get([STORAGE_KEY], result => {
+      resolve(result[STORAGE_KEY] || {});
+    });
+  });
+
+//-----------------------------------------End of Scraping logic--------------------------------------------------*/
+
+// <--------------------------------------Data cleaning------------------------------------------------------>
+
+// Function to group prices by day
+
+function summarizeLatestPrices(buffer) {
+  const summary = {};
+
+  for (const hotel in buffer) {
+    const entries = buffer[hotel];
+    if (!entries.length) continue;
+
+    // Extract numeric prices, ignoring invalid ones
+    const prices = entries
+      .map(e => parseFloat(String(e.price).replace(/[^0-9.]/g, '')))
+      .filter(p => !isNaN(p));
+
+    if (prices.length === 0) {
+      prices.push(0); // If no valid prices, default to 0
+      log(`⚠️ No valid prices found for ${hotel}. Defaulting to 0.`);
+    }
+
+    const openingPrice = prices[0];
+    const closingPrice = prices[prices.length - 1];
+    const priceRange = [Math.min(...prices), Math.max(...prices)];
+    const average = prices.reduce((a, b) => a + b, 0) / prices.length;
+
+    // Use the date portion of the earliest entry timestamp for consistency
+    const dateKey = entries[0].timestamp.split('T')[0];
+
+    summary[hotel] = {
+      timestamp: dateKey,
+      openingPrice,
+      closingPrice,
+      priceRange,
+      average: Number(average.toFixed(2)),
+      currency: entries[0].currency || 'USD',
+      source: entries[entries.length - 1].source || 'auto'
+    };
+  }
+
+  return summary;
 }
 
 
 
-//<--------------------------------------Notification System ------------------------------------------------------>
+async function pushSummaryToFirebase(summary) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("No user logged in");
+
+  const dateKey = new Date().toISOString().split('T')[0]; // e.g., "2025-07-15"
+
+  for (const hotel in summary) {
+    const sanitizedHotel = hotel.replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, ''); // ✅ Move this above
+
+    // ✅ Document path: users/<uid>/priceHistory/<sanitizedHotel>
+    const docRef = doc(db, "users", user.uid, "priceHistory", sanitizedHotel);
+
+    // ✅ summary[hotel] — NOT [Hotel] (capital H was causing undefined)
+    const hotelSummary = summary[hotel];
+
+    try {
+      await setDoc(docRef, { [dateKey]: hotelSummary }, { merge: true });
+      log(`✅ Pushed price summary for ${sanitizedHotel} to Firestore.`);
+      showStatusMsg(`✅ Price summary for ${hotel} saved.`, false);
+    } catch (err) {
+      error(`❌ Failed to push price summary for ${hotel}:`, err);
+      showStatusMsg(`❌ Failed to save ${hotel}: ${err.message}`, true);
+      throw new Error(`Failed to push price summary for ${hotel}: ${err.message}`);
+    }
+  }
+}
+
+
+function clearPriceBuffer() {
+  return chrome.storage.local.remove(STORAGE_KEY);
+}
+
+async function consolidatePriceBuffer() {
+  const buffer = await getPriceBuffer();
+  const summary = summarizeLatestPrices(buffer);
+  await pushSummaryToFirebase(summary);
+  if (!isDev) await clearPriceBuffer(); // Don't clear buffer in dev mode for testing
+  log("the summary of latest prices:", summary);
+  log("✅ Consolidated to Firebase and cleared local buffer.");
+}
+
+
+
+//--------------------------------------Notification System ------------------------------------------------------*/
 // Function to send email request document in Firestore
 async function sendEmailRequest(requestData) {
   const user = auth.currentUser;
@@ -573,7 +699,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     log('⏰ Daily scrape alarm triggered');
 
     try {
-      const message = await openTabsAndScrape({ waitIfBusy: true }); // wait for scrape
+      const message = await openTabsAndScrape({ waitIfBusy: true, agent: 'auto' }); // wait for scrape
       if (message === 'used existing scrape') {
         log("✅ Using existing scrape data.");
       } else {
@@ -594,9 +720,18 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   else if (alarm.name === 'frequentScrape') {
     log('⏰ Frequent scrape alarm triggered');
     try {
-      await openTabsAndScrape();
+      await openTabsAndScrape({ agent: 'auto' });
     } catch (err) {
       console.error("❌ Error during frequent scrape:", err);
+    }
+  }
+  else if (alarm.name === 'dailySync') {
+    log('⏰ Daily sync alarm triggered');
+    try {
+      await consolidatePriceBuffer();
+      log("✅ Daily sync completed successfully.");
+    } catch (err) {
+      console.error("❌ Error during daily sync:", err);
     }
   }
 });
@@ -618,18 +753,14 @@ function scheduleDailyScrape(hour = 11, minute = 10) {
     }
 
     chrome.alarms.create('dailyScrape', { when: when.getTime(), periodInMinutes: 24 * 60 });
+    chrome.storage.local.set({ dailyScrapeEnabled: true });
     log(`Scheduled daily scrape alarm at ${hour}:${minute < 10 ? '0' : ''}${minute}`);
     showStatusMsg(`Scheduled daily scrape at ${hour}:${minute < 10 ? '0' : ''}${minute} every day.`, false);
   });
 }
 
 
-//wrapper function for the showStatusMsg function in popup.js
-// This function sends a message to the popup to show a status message
-function showStatusMsg(msg, isError = false, timeout = 3000) {
-  chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError, timeout });
-}
-
+//cancel the daily scrape alarm
 function cancelDailyScrape() {
   chrome.alarms.get('dailyScrape', (alarm) => {
     if (!alarm) {
@@ -643,6 +774,7 @@ function cancelDailyScrape() {
         if (!afterClear) {
           showStatusMsg("✅ Daily scrape alarm cancelled.", false);
           console.log("✅ Alarm 'dailyScrape' cleared.");
+          chrome.storage.local.set({ dailyScrapeEnabled: false });
         } else {
           showStatusMsg("❌ Failed to cancel daily scrape alarm.", true);
           console.log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
@@ -652,38 +784,112 @@ function cancelDailyScrape() {
   });
 }
 
-function scheduleFrequentScrape(intervalInMinutes) {
+function scheduleFrequentScrape(intervalInMinutes = 30) {
   chrome.alarms.clear('frequentScrape', () => {
     const when = Date.now() + intervalInMinutes * 60 * 1000;
     chrome.alarms.create('frequentScrape', { when, periodInMinutes: intervalInMinutes });
+    chrome.storage.local.set({ frequentScrapeInterval: intervalInMinutes, frequentScrapeEnabled: true }, () => {
+      log(`✅ Scheduled frequent scrape every ${intervalInMinutes} minutes.`);
+    });
     showStatusMsg(`✅ Scheduled frequent scrape every ${intervalInMinutes} minutes.`);
+    scheduleDailySync(); // Ensure daily sync is scheduled
   });
 }
 
+// Function to cancel the frequent scrape alarm and also clear the daily sync alarm if no data exists no need to sync.
 function cancelFrequentScrape() {
   chrome.alarms.get('frequentScrape', (alarm) => {
     if (!alarm) {
       showStatusMsg("⚠️ No frequent scrape alarm exists.", true);
       console.log("⚠️ No alarm named 'frequentScrape' found.");
-    } else {
-      chrome.alarms.clear('frequentScrape', () => {
-        // Recheck just to confirm it's gone
-        chrome.alarms.get('frequentScrape', (afterClear) => {
-          if (!afterClear) {
-            showStatusMsg("✅ Frequent scrape alarm cancelled.", false);
-            console.log("✅ Alarm 'frequentScrape' cleared.");
-          } else {
-            showStatusMsg("❌ Failed to cancel frequent scrape alarm.", true);
-            console.log("❌ Alarm 'frequentScrape' still exists after attempting to clear.");
-          }
-        });
-      });
+      return;
     }
+    chrome.alarms.clear('frequentScrape', () => {
+      // Recheck just to confirm it's gone
+      chrome.alarms.get('frequentScrape', (afterClear) => {
+        if (!afterClear) {
+          showStatusMsg("✅ Frequent scrape alarm cancelled.", false);
+          console.log("✅ Alarm 'frequentScrape' cleared.");
+          chrome.storage.local.set({ frequentScrapeInterval: null , frequentScrapeEnabled: false });
+        } else {
+          showStatusMsg("❌ Failed to cancel frequent scrape alarm.", true);
+          console.log("❌ Alarm 'frequentScrape' still exists after attempting to clear.");
+        }
+      });
+    });
+
+    //clear dailysync alarm too
+    chrome.alarms.clear('dailySync', (wasCleared) => {
+      if (wasCleared) {
+        showStatusMsg("✅ Daily sync alarm cleared.", false);
+        console.log("✅ Daily sync alarm cleared.");
+      } else {
+        showStatusMsg("⚠️ No daily sync alarm existed.", true);
+        console.log("⚠️ Daily sync alarm did not exist.");
+      }
+    });
   });
+}
+
+function scheduleDailySync(hour = 23, minute = 30) {
+  const now = new Date();
+  const next = new Date();
+
+  next.setHours(hour, minute, 0, 0); // target sync time
+  if (next <= now) {
+    next.setDate(next.getDate() + 1); // move to next day if time passed
+  }
+
+  const delayInMinutes = (next - now) / 60000;
+
+  chrome.alarms.create("dailySync", {
+    delayInMinutes,
+    periodInMinutes: 1440 // 24 hours
+  });
+
+  console.log(`⏰ Scheduled daily sync in ${delayInMinutes.toFixed(2)} mins`);
 }
 
 // <--------------------------------------Listeners------------------------------------------------------>
 
+//calibrate the daily sync alarm on install and startup
+chrome.runtime.onInstalled.addListener(() => {
+  scheduleFrequentScrape(); //this will also set the daily sync alarm
+  scheduleDailyScrape(); // Default to 11:10 AM
+  log("🔧 Extension installed. Scheduled daily scrape at 11:10 AM and frequent scrape every 30 minutes.");
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  chrome.storage.local.get(
+    ['frequentScrapeEnabled', 'frequentScrapeInterval', 'dailyScrapeEnabled', 'dailyScrapeTime'],
+    (result) => {
+      if (result.frequentScrapeEnabled) {
+        const interval = parseInt(result.frequentScrapeInterval, 10);
+        if (!isNaN(interval) && interval > 0) {
+          scheduleFrequentScrape(interval);
+        } else {
+          console.warn("⚠️ Invalid or missing frequentScrapeInterval. Skipping scheduling.");
+        }
+      }
+
+      if (result.dailyScrapeEnabled) {
+        const time = result.dailyScrapeTime || { hour: 11, minute: 10 };
+        const hour = parseInt(time.hour, 10);
+        const minute = parseInt(time.minute, 10);
+
+        if (!isNaN(hour) && !isNaN(minute)) {
+          scheduleDailyScrape(hour, minute);
+        } else {
+          console.warn("⚠️ Invalid dailyScrapeTime. Skipping daily scrape scheduling.");
+        }
+      }
+    }
+  );
+  log("🔧 Extension started. Checked and scheduled daily and frequent scrapes based on stored settings.");
+});
+
+
+// Listen for messages from popup.js or content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.action) {
     case 'syncPropertyLinks':
@@ -702,7 +908,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendEmailRequest(message.requestData);
       break;
     case 'startScraping':
-      openTabsAndScrape();
+      openTabsAndScrape({ agent: 'manual' });
       break;
     case 'logoutUser':
       LogoutUser();
@@ -737,6 +943,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+
+
 // Dev Only 
 if (isDev) {
   function testMail() {
@@ -754,8 +962,20 @@ if (isDev) {
       testMail();
       showStatusMsg("✅ Test email sent successfully.", false);
     }
+
+    if (message.action === 'getSummaryPrices') {
+      consolidatePriceBuffer();
+      showStatusMsg("✅ Test price summary consolidated.", false);
+    }
   });
   log("🔧 Dev mode enabled: Test email functionality is active.");
+}
+
+
+//wrapper function for the showStatusMsg function in popup.js
+// This function sends a message to the popup to show a status message
+function showStatusMsg(msg, isError = false, timeout = 3000) {
+  chrome.runtime.sendMessage({ action: 'showStatusMsg', msg, isError, timeout });
 }
 
 

@@ -12,6 +12,7 @@ module.exports = (env, argv) => {
         entry: {
             background: './src/background.js',
             'popup/popup': './src/popup/popup.jsx',
+            'dashboard/dashboard': './src/dashboard/main.jsx',
         },
         output: {
             path: path.resolve(__dirname, 'dist'),
@@ -22,6 +23,7 @@ module.exports = (env, argv) => {
                 patterns: [
                     { from: 'manifest.json', to: '' },
                     { from: 'src/popup/popup.html', to: 'popup' },
+                    { from: 'src/dashboard/dashboard.html', to: 'dashboard' },
                     { from: 'src/icons', to: 'icons' },
                 ],
             }),

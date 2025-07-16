@@ -611,7 +611,10 @@ function summarizeLatestPrices(buffer) {
   return summary;
 }
 
-
+// Function to sanitize hotel names for Firestore document IDs
+function nameSanitizer(name) {
+  return name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+}
 
 async function pushSummaryToFirebase(summary) {
   const user = auth.currentUser;
@@ -620,7 +623,7 @@ async function pushSummaryToFirebase(summary) {
   const dateKey = new Date().toISOString().split('T')[0]; // e.g., "2025-07-15"
 
   for (const hotel in summary) {
-    const sanitizedHotel = hotel.replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, ''); // ✅ Move this above
+    const sanitizedHotel = nameSanitizer(hotel);
 
     // ✅ Document path: users/<uid>/priceHistory/<sanitizedHotel>
     const docRef = doc(db, "users", user.uid, "priceHistory", sanitizedHotel);
@@ -654,7 +657,21 @@ async function consolidatePriceBuffer() {
   log("✅ Consolidated to Firebase and cleared local buffer.");
 }
 
+function getPriceHistory(hotelName) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("No user logged in");
 
+  const sanitizedHotel = nameSanitizer(hotelName);
+  const docRef = doc(db, "users", user.uid, "priceHistory", sanitizedHotel);
+
+  return getDoc(docRef).then((doc) => {
+    if (!doc.exists()) {
+      log(`⚠️ No price history found for ${hotelName}`);
+      return null;
+    }
+    return doc.data();
+  });
+}
 
 //--------------------------------------Notification System ------------------------------------------------------*/
 // Function to send email request document in Firestore

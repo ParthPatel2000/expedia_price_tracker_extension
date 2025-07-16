@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./tailwind.css";
 import DailyScrapeView from "./DailyScrapeView";
-import PricesView from "./PricesView";  
+import PricesView from "./PricesView";
 import SettingsView from "./SettingsView";
 import PropertiesView from "./PropertiesView";
 
@@ -9,7 +9,7 @@ export default function App() {
     const [activeView, setActiveView] = useState("prices");
     const [statusMsg, setStatusMsg] = useState("");
     const [isError, setIsError] = useState(false);
-    
+
     const showStatusMsg = (msg, error = false, timeout = 3000) => {
         setStatusMsg(msg);
         setIsError(error);
@@ -62,6 +62,15 @@ export default function App() {
             {activeView === 'dailyScrape' && (
                 <DailyScrapeView
                     onBack={() => setActiveView('settings')}
+                    statusMsg={statusMsg}
+                    isError={isError}
+                    showStatusMsg={showStatusMsg}
+                />
+            )}
+
+            {activeView === "priceHistory" && (
+                <PriceHistory
+                    setActiveView={setActiveView}
                     statusMsg={statusMsg}
                     isError={isError}
                     showStatusMsg={showStatusMsg}

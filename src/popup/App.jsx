@@ -16,11 +16,6 @@ export default function App() {
         setTimeout(() => setStatusMsg(""), timeout);
     };
 
-    // Load initial state
-    useEffect(() => {
-        chrome.runtime.sendMessage({ action: "loginAtStartup" });
-    }, []);
-
     useEffect(() => {
         const messageListener = (message) => {
             if (message.action === "showStatusMsg") {
@@ -62,15 +57,6 @@ export default function App() {
             {activeView === 'dailyScrape' && (
                 <DailyScrapeView
                     onBack={() => setActiveView('settings')}
-                    statusMsg={statusMsg}
-                    isError={isError}
-                    showStatusMsg={showStatusMsg}
-                />
-            )}
-
-            {activeView === "priceHistory" && (
-                <PriceHistory
-                    setActiveView={setActiveView}
                     statusMsg={statusMsg}
                     isError={isError}
                     showStatusMsg={showStatusMsg}

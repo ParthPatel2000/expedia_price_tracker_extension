@@ -60,6 +60,7 @@ export default function PropertiesView({ onBack, statusMsg, isError, showStatusM
                     return;
                 }
                 const updated = [...existing, { name: displayName, url }];
+                updated.sort((a, b) => a.name.localeCompare(b.name));
                 chrome.storage.local.set({ propertyLinks: updated }, () => {
                     chrome.runtime.sendMessage({ action: "syncPropertyLinks" });
                     showStatusMsg(`✅ Saved: ${displayName}`);

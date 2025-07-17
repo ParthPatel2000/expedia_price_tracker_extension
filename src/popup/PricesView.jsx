@@ -88,6 +88,15 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
                     >
                         🧹 Clear Prices
                     </button>
+                    {/* Open Dashboard Button */}
+                    <button
+                        onClick={() => {
+                            chrome.runtime.sendMessage({ action: "openDashboard" });
+                        }}
+                        className="btn"
+                    >
+                        🧾 Open Dashboard
+                    </button>
                 </div>
             )}
 

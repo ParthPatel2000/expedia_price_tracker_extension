@@ -36,6 +36,7 @@ const backprops = [
     "url": "https://www.expedia.com/Hotel-Search?destination=Concord%2C%20North%20Carolina%2C%20United%20States%20of%20America&regionId=7402&latLong=35.408752%2C-80.579513&flexibility=0_DAY&d1=2025-06-05&startDate=2025-06-23&d2=2025-06-06&endDate=2025-06-24&adults=2&rooms=1&sort=RECOMMENDED&isInvalidatedDate=false&upsellingNumNightsAdded=&th&theme=&userIntent=&semdtl=&upsellingDiscountTypeAdded=&categorySearch=&useRewards=false&hotelName=Comfort%20Suites%20Concord%20Mills&selected=912941"
   }
 ]
+backprops.sort((a, b) => a.name.localeCompare(b.name));
 
 chrome.storage.local.set({ propertyLinks: backprops }, () => {
   console.log("✅ backupProps pushed to propertyLinks in local storage.");

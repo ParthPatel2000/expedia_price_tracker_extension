@@ -13,7 +13,6 @@
   "action": {
     "default_popup": "popup/popup.html"
   },
-  "options_page": "dashboard/dashboard.html",
   "web_accessible_resources": [
     {
       "resources": [

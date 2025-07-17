@@ -12,6 +12,7 @@ module.exports = (env, argv) => {
         entry: {
             background: './src/background.js',
             'popup/popup': './src/popup/popup.jsx',
+            'dashboard/dashboard': './src/dashboard/main.jsx',
         },
         output: {
             path: path.resolve(__dirname, 'dist'),
@@ -22,6 +23,7 @@ module.exports = (env, argv) => {
                 patterns: [
                     { from: 'manifest.json', to: '' },
                     { from: 'src/popup/popup.html', to: 'popup' },
+                    { from: 'src/dashboard/dashboard.html', to: 'dashboard' },
                     { from: 'src/icons', to: 'icons' },
                 ],
             }),
@@ -42,13 +44,29 @@ module.exports = (env, argv) => {
         },
         module: {
             rules: [
+                // {
+                //     test: /\.jsx?$/,
+                //     exclude: /node_modules/,
+                //     use: {
+                //         loader: 'babel-loader',
+                //         options: {
+                //             presets: ['@babel/preset-env', '@babel/preset-react'],
+                //         },
+                //     },
+                // },
                 {
                     test: /\.jsx?$/,
-                    exclude: /node_modules/,
+                    exclude: (filePath) => {
+                        return /node_modules/.test(filePath) || /src[\\/]background\.js$/.test(filePath);
+                    },
                     use: {
                         loader: 'babel-loader',
                         options: {
                             presets: ['@babel/preset-env', '@babel/preset-react'],
+                            plugins: [
+                                ['@babel/plugin-transform-runtime', { regenerator: true }],
+                                ['transform-remove-console', { exclude: ['error', 'warn'] }],
+                            ],
                         },
                     },
                 },

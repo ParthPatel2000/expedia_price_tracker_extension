@@ -1,30 +1,20 @@
 // background.js
-import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithCredential, linkWithCredential, signOut } from 'firebase/auth/web-extension';
-import { getFirestore, collection, doc, setDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from './lib/firebase';
+import { getPriceHistoryIDB, savePriceHistoryIDB } from './lib/priceHistoryDB';
+import {
+  onAuthStateChanged, signInAnonymously,
+  GoogleAuthProvider, signInWithCredential, linkWithCredential,
+  signOut, onIdTokenChanged
+} from 'firebase/auth/web-extension';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
+// dev mode logging
 const isDev = process.env.NODE_ENV === 'development';
 
 const log = (...args) => isDev && console.log(...args);
 const warn = (...args) => isDev && console.warn(...args);
 const error = (...args) => isDev && console.error(...args);
-
-
-// Initialize Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyDyyvoB--tTFhPXkujZDr8AbDye7goTSF0",
-  authDomain: "expedia-price-tracker.firebaseapp.com",
-  projectId: "expedia-price-tracker",
-  storageBucket: "expedia-price-tracker.firebasestorage.app",
-  messagingSenderId: "541814014300",
-  appId: "1:541814014300:web:885e4b4805ab0d0b65c199",
-  measurementId: "G-2LM8BZW01E"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
+//----------------------------------------------------------
 
 // sync property links from Chrome storage function
 function syncPropertyLinksToFirestore() {
@@ -44,8 +34,6 @@ function syncPropertyLinksToFirestore() {
       });
   });
 }
-
-
 
 
 // Function to download property links from Firestore to Chrome storage
@@ -71,33 +59,13 @@ function downloadPropertyLinksFromFirestore() {
   });
 }
 
-
-
-
-//function to change user's authentication state
-//saves a uthentication state to local storage
-function authStateChange(newState) {
-  if (newState === 'anonymous') {
-    chrome.storage.local.set({ authState: 'anonymous' }, () => {
-      log("✅ Authentication state set to anonymous");
-    });
-
-  } else if (newState === 'google') {
-    chrome.storage.local.set({ authState: 'google' }, () => {
-      log("✅ Authentication state set to Google");
-    });
-
-  }
-  return;
-}
-
+// Function to log authentication state changes in chrome.storage.local
 // Monitor auth state changes
 onAuthStateChanged(auth, (user) => {
-  if (user) {
-    authStateChange(user.isAnonymous ? 'anonymous' : 'google');
-  } else {
-    authStateChange('none');
-  }
+  const state = user?.isAnonymous ? 'anonymous' : 'google';
+  chrome.storage.local.set({ authState: state }, () => {
+    log(`✅ Authentication state set to ${state}`);
+  });
 });
 
 
@@ -185,6 +153,11 @@ function LogoutUser() {
     });
 }
 
+onIdTokenChanged(auth, async (user) => {
+  if (user) {
+    log('Token refreshed:');
+  }
+});
 
 
 
@@ -196,9 +169,6 @@ function LogoutUser() {
 function loginAtStartup() {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
-      // Save auth state locally
-      authStateChange(user.isAnonymous ? 'anonymous' : 'google');
-
       // First-time or returning?
       const isFirstTime = user.metadata.creationTime === user.metadata.lastSignInTime;
 
@@ -212,7 +182,6 @@ function loginAtStartup() {
       try {
         const cred = await signInAnonymously(auth);
         log("✅ Anonymous login successful:", cred.user.uid);
-        authStateChange('anonymous');
         chrome.storage.local.set({ loginAtStartup: true });
       } catch (err) {
         error("❌ Anonymous login failed:", err);
@@ -288,7 +257,28 @@ function generateUrls() {
   return props.map(p => updateUrlWithDates(p.url, checkIn, checkOut));
 }
 
+
 async function openTabsAndScrape_() {
+  function waitForTabComplete(tabId, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      let timer = setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        reject(new Error("Timeout waiting for tab to load"));
+      }, timeout);
+
+      function listener(updatedTabId, changeInfo) {
+        if (updatedTabId === tabId && changeInfo.status === "complete") {
+          clearTimeout(timer);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      }
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  }
+
+  const startTime = Date.now();
   let anyError = false;
   const urls = generateUrls();
   if (!urls || urls.length === 0) {
@@ -296,9 +286,10 @@ async function openTabsAndScrape_() {
     return;
   }
 
+
   const delay = await new Promise(resolve =>
     chrome.storage.local.get({ pageDelay: 6 }, res => resolve(res.pageDelay * 1000))
-  );
+  ); // Convert to milliseconds
 
   const config = await getScrapeConfig();
 
@@ -328,8 +319,7 @@ async function openTabsAndScrape_() {
         });
       }
 
-      let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
-      await new Promise(r => setTimeout(r, delayMs));
+      await waitForTabComplete(tab.id); // Wait for tab to load
 
       try {
         await chrome.scripting.executeScript({
@@ -379,13 +369,16 @@ async function openTabsAndScrape_() {
     // Close the tab after scraping is complete
     await new Promise((resolve) => {
       chrome.tabs.remove(tab.id, () => {
+        const endTime = Date.now();
         console.log("Tab closed after scraping all properties");
+        console.log(`Total scraping time: ${endTime - startTime} ms`);
         resolve();
       });
     });
   }
-
 }
+
+
 
 async function openTabsAndScrape({ waitIfBusy = false, agent = 'auto' } = {}) {
   const getIsScraping = () =>
@@ -413,14 +406,14 @@ async function openTabsAndScrape({ waitIfBusy = false, agent = 'auto' } = {}) {
 
   if (await getIsScraping()) {
     if (waitIfBusy) {
-      console.log("⏳ Scrape in progress, waiting...");
+      log("⏳ Scrape in progress, waiting...");
       while (await getIsScraping()) {
         await new Promise((r) => setTimeout(r, 1000));
       }
-      console.log("✅ Previous scrape finished. Proceeding...");
+      log("✅ Previous scrape finished. Proceeding...");
       return 'used existing scrape';
     } else {
-      console.warn("⚠️ Scrape already in progress. Aborting new scrape.");
+      warn("⚠️ Scrape already in progress. Aborting new scrape.");
       return null;
     }
   }
@@ -430,7 +423,7 @@ async function openTabsAndScrape({ waitIfBusy = false, agent = 'auto' } = {}) {
     agent_ = agent; // Update global agent variable for the price snapshot function
     await openTabsAndScrape_();
   } catch (err) {
-    console.error("❌ Error inside scrape lock wrapper:", err);
+    error("❌ Error inside scrape lock wrapper:", err);
     throw err;
   } finally {
     await setIsScraping(false);
@@ -455,14 +448,69 @@ async function getScrapeConfig() {
 
     return config;
   } catch (err) {
-    console.warn('⚠️ Using default config due to fetch error:', err);
+    warn('⚠️ Using default config due to fetch error:', err);
     return defaultConfig;
   }
 }
 
 
 //The scraping script for extracting price from HTML.
-function runScrapingScript(config) {
+async function runScrapingScript(config) {
+
+  // --- Begin stealth background events simulation ---
+  const events = ['focus', 'blur'];
+
+  function fireEvent(eventType) {
+    switch (eventType) {
+      case 'focus': {
+        const x = Math.random() * window.innerWidth;
+        const y = Math.random() * window.innerHeight;
+        const evt = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          screenX: x,
+          screenY: y
+        });
+        document.dispatchEvent(evt);
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: Mouse Move` });
+        // Simulate focus event
+        window.dispatchEvent(new Event('focus', { bubbles: true }));
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: ${eventType}` });
+        break;
+      }
+      case 'blur': {
+        const x = Math.random() * window.innerWidth;
+        const y = Math.random() * window.innerHeight;
+        const evt = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          screenX: x,
+          screenY: y
+        });
+        document.dispatchEvent(evt);
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: Mouse Move` });
+        // Simulate blur event
+        window.dispatchEvent(new Event('blur', { bubbles: true }));
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: ${eventType}` });
+        break;
+      }
+    }
+  }
+
+  // Fire 2 or 3 random stealth events with delays
+  const count = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < count; i++) {
+    const eventType = events[Math.floor(Math.random() * events.length)];
+    fireEvent(eventType);
+    // Wait 0.001 sec to 0.025 sec between events
+    await new Promise(r => setTimeout(r, 10 + Math.random() * 15));
+  }
+  // --- End stealth events simulation ---
+
   var getFirstMatchingElement = function (selectors, filterFn) {
     filterFn = filterFn || function () { return true; };
     for (var i = 0; i < selectors.length; i++) {
@@ -508,10 +556,10 @@ function runScrapingScript(config) {
 
   var params = new URLSearchParams(window.location.search);
   var hotelName = params.get('hotelName') || 'Unknown Hotel';
-
-  console.log('💾 Stored/updated price for ' + hotelName + ':', price);
+  chrome.runtime.sendMessage({ action: 'logMessage', msg: `☁️ fetched price for ${hotelName}: ${price}` });
   chrome.runtime.sendMessage({ action: "storePrice", price: price, hotelName: hotelName });
 }
+
 
 function storePrice(hotelName, price) {
   chrome.storage.local.get({ prices: {} }, (result) => {
@@ -537,7 +585,7 @@ function storePrice(hotelName, price) {
   });
 }
 // Key used in chrome.storage.local
-const STORAGE_KEY = "priceHistoryBuffer";
+const STORAGE_KEY = "todaysPriceHistoryBuffer";
 
 async function addPriceSnapshot(hotelName, price, currency = 'USD', source = 'auto') {
   const data = await chrome.storage.local.get(STORAGE_KEY);
@@ -657,7 +705,7 @@ async function consolidatePriceBuffer() {
   log("✅ Consolidated to Firebase and cleared local buffer.");
 }
 
-function getPriceHistory(hotelName) {
+async function fetchPriceHistoryfromFirebase(hotelName) {
   const user = auth.currentUser;
   if (!user) throw new Error("No user logged in");
 
@@ -671,6 +719,55 @@ function getPriceHistory(hotelName) {
     }
     return doc.data();
   });
+}
+
+//idb caller function to fetch and store price history
+async function fetchAndStorePriceHistory(hotelName) {
+  log(`Fetching price history for ${hotelName}...`);
+  try {
+    const data = await fetchPriceHistoryfromFirebase(hotelName);
+    if (!data) {
+      log(`⚠️ No price history found for ${hotelName}`);
+      return null;
+    }
+    await savePriceHistoryIDB(hotelName, data);
+  }
+  catch (err) {
+    error(`❌ Error fetching or storing price history for ${hotelName}:`, err);
+  }
+}
+
+async function getPriceHistory(hotelName) {
+  log(`Fetching price history for ${hotelName}...`);
+
+  try {
+    // 1. Try from IDB first
+    const localHistory = await getPriceHistoryIDB(hotelName);
+    if (localHistory) {
+      log(`✅ Fetched from IDB:`, localHistory);
+      chrome.runtime.sendMessage({ action: "priceHistoryFetched", hotelName, history: localHistory });
+      return localHistory;
+    }
+
+    // 2. Try from Firebase if IDB empty
+    log(`⚠️ No data in IDB, trying Firebase...`);
+    await fetchAndStorePriceHistory(hotelName);
+
+    const newHistory = await getPriceHistoryIDB(hotelName);
+    if (newHistory) {
+      log(`✅ Fetched from Firebase (now in IDB):`, newHistory);
+      chrome.runtime.sendMessage({ action: "priceHistoryFetched", hotelName, history: newHistory });
+      return newHistory;
+    } else {
+      log(`❌ Still no data after Firebase fetch.`);
+      chrome.runtime.sendMessage({ action: "noPriceHistory", hotelName, history: null });
+      return null;
+    }
+  } catch (err) {
+    log(`🔥 Error fetching price history for ${hotelName}:`, err);
+    chrome.runtime.sendMessage({ action: "noPriceHistory", hotelName, history: null });
+    return null;
+  }
 }
 
 //--------------------------------------Notification System ------------------------------------------------------*/
@@ -731,7 +828,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       await sendEmailRequest({ prices: result.prices });
 
     } catch (err) {
-      console.error("❌ Error during daily scrape or email:", err);
+      error("❌ Error during daily scrape or email:", err);
     }
   }
   else if (alarm.name === 'frequentScrape') {
@@ -739,16 +836,16 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     try {
       await openTabsAndScrape({ agent: 'auto' });
     } catch (err) {
-      console.error("❌ Error during frequent scrape:", err);
+      error("❌ Error during frequent scrape:", err);
     }
   }
   else if (alarm.name === 'dailySync') {
     log('⏰ Daily sync alarm triggered');
     try {
-      await consolidatePriceBuffer();
+      await consolidatePriceBuffer(); //consolidate prices and push to Firebase for price history
       log("✅ Daily sync completed successfully.");
     } catch (err) {
-      console.error("❌ Error during daily sync:", err);
+      error("❌ Error during daily sync:", err);
     }
   }
 });
@@ -782,7 +879,7 @@ function cancelDailyScrape() {
   chrome.alarms.get('dailyScrape', (alarm) => {
     if (!alarm) {
       showStatusMsg("⚠️ No daily scrape alarm exists.", true);
-      console.log("⚠️ No alarm named 'dailyScrape' found.");
+      log("⚠️ No alarm named 'dailyScrape' found.");
       return;
     }
 
@@ -790,11 +887,11 @@ function cancelDailyScrape() {
       chrome.alarms.get('dailyScrape', (afterClear) => {
         if (!afterClear) {
           showStatusMsg("✅ Daily scrape alarm cancelled.", false);
-          console.log("✅ Alarm 'dailyScrape' cleared.");
+          log("✅ Alarm 'dailyScrape' cleared.");
           chrome.storage.local.set({ dailyScrapeEnabled: false });
         } else {
           showStatusMsg("❌ Failed to cancel daily scrape alarm.", true);
-          console.log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
+          log("❌ Alarm 'dailyScrape' still exists after attempting to clear.");
         }
       });
     });
@@ -818,7 +915,7 @@ function cancelFrequentScrape() {
   chrome.alarms.get('frequentScrape', (alarm) => {
     if (!alarm) {
       showStatusMsg("⚠️ No frequent scrape alarm exists.", true);
-      console.log("⚠️ No alarm named 'frequentScrape' found.");
+      log("⚠️ No alarm named 'frequentScrape' found.");
       return;
     }
     chrome.alarms.clear('frequentScrape', () => {
@@ -826,11 +923,11 @@ function cancelFrequentScrape() {
       chrome.alarms.get('frequentScrape', (afterClear) => {
         if (!afterClear) {
           showStatusMsg("✅ Frequent scrape alarm cancelled.", false);
-          console.log("✅ Alarm 'frequentScrape' cleared.");
-          chrome.storage.local.set({ frequentScrapeInterval: null , frequentScrapeEnabled: false });
+          log("✅ Alarm 'frequentScrape' cleared.");
+          chrome.storage.local.set({ frequentScrapeInterval: null, frequentScrapeEnabled: false });
         } else {
           showStatusMsg("❌ Failed to cancel frequent scrape alarm.", true);
-          console.log("❌ Alarm 'frequentScrape' still exists after attempting to clear.");
+          log("❌ Alarm 'frequentScrape' still exists after attempting to clear.");
         }
       });
     });
@@ -839,10 +936,10 @@ function cancelFrequentScrape() {
     chrome.alarms.clear('dailySync', (wasCleared) => {
       if (wasCleared) {
         showStatusMsg("✅ Daily sync alarm cleared.", false);
-        console.log("✅ Daily sync alarm cleared.");
+        log("✅ Daily sync alarm cleared.");
       } else {
         showStatusMsg("⚠️ No daily sync alarm existed.", true);
-        console.log("⚠️ Daily sync alarm did not exist.");
+        log("⚠️ Daily sync alarm did not exist.");
       }
     });
   });
@@ -864,7 +961,7 @@ function scheduleDailySync(hour = 23, minute = 30) {
     periodInMinutes: 1440 // 24 hours
   });
 
-  console.log(`⏰ Scheduled daily sync in ${delayInMinutes.toFixed(2)} mins`);
+  log(`⏰ Scheduled daily sync in ${delayInMinutes.toFixed(2)} mins`);
 }
 
 // <--------------------------------------Listeners------------------------------------------------------>
@@ -873,10 +970,12 @@ function scheduleDailySync(hour = 23, minute = 30) {
 chrome.runtime.onInstalled.addListener(() => {
   scheduleFrequentScrape(); //this will also set the daily sync alarm
   scheduleDailyScrape(); // Default to 11:10 AM
+  loginAtStartup(); // Ensure user is logged in at startup
   log("🔧 Extension installed. Scheduled daily scrape at 11:10 AM and frequent scrape every 30 minutes.");
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  loginAtStartup(); // Ensure user is logged in at startup
   chrome.storage.local.get(
     ['frequentScrapeEnabled', 'frequentScrapeInterval', 'dailyScrapeEnabled', 'dailyScrapeTime'],
     (result) => {
@@ -885,7 +984,7 @@ chrome.runtime.onStartup.addListener(() => {
         if (!isNaN(interval) && interval > 0) {
           scheduleFrequentScrape(interval);
         } else {
-          console.warn("⚠️ Invalid or missing frequentScrapeInterval. Skipping scheduling.");
+          warn("⚠️ Invalid or missing frequentScrapeInterval. Skipping scheduling.");
         }
       }
 
@@ -897,7 +996,7 @@ chrome.runtime.onStartup.addListener(() => {
         if (!isNaN(hour) && !isNaN(minute)) {
           scheduleDailyScrape(hour, minute);
         } else {
-          console.warn("⚠️ Invalid dailyScrapeTime. Skipping daily scrape scheduling.");
+          warn("⚠️ Invalid dailyScrapeTime. Skipping daily scrape scheduling.");
         }
       }
     }
@@ -915,7 +1014,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'downloadPropertyLinks':
       downloadPropertyLinksFromFirestore();
       break;
-    case 'loginAtStartup':
+    case 'loginAtStartup': // mostly redundant, but left for now.
       loginAtStartup();
       break;
     case 'startGoogleOAuth':
@@ -953,6 +1052,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         storePrice(message.hotelName, message.price);
       }
       break;
+    case 'openDashboard':
+      chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/dashboard.html') });
+      break;
+    case 'getPriceHistory':
+      getPriceHistory(message.hotelName);
+      break;
+    case 'logMessage':
+      log("🔧 External log:", message.msg);
+      break;
     default:
       warn("⚠️ Unknown action received:", message.action);
       showStatusMsg("⚠️ Unknown action: " + message.action, true);
@@ -981,9 +1089,12 @@ if (isDev) {
     }
 
     if (message.action === 'getSummaryPrices') {
+      log("🔧 Fetched price history:", priceHistory);
       consolidatePriceBuffer();
       showStatusMsg("✅ Test price summary consolidated.", false);
     }
+
+
   });
   log("🔧 Dev mode enabled: Test email functionality is active.");
 }

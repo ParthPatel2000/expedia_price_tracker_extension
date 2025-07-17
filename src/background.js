@@ -257,7 +257,28 @@ function generateUrls() {
   return props.map(p => updateUrlWithDates(p.url, checkIn, checkOut));
 }
 
+
 async function openTabsAndScrape_() {
+  function waitForTabComplete(tabId, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      let timer = setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        reject(new Error("Timeout waiting for tab to load"));
+      }, timeout);
+
+      function listener(updatedTabId, changeInfo) {
+        if (updatedTabId === tabId && changeInfo.status === "complete") {
+          clearTimeout(timer);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      }
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  }
+
+  const startTime = Date.now();
   let anyError = false;
   const urls = generateUrls();
   if (!urls || urls.length === 0) {
@@ -265,9 +286,10 @@ async function openTabsAndScrape_() {
     return;
   }
 
+
   const delay = await new Promise(resolve =>
     chrome.storage.local.get({ pageDelay: 6 }, res => resolve(res.pageDelay * 1000))
-  );
+  ); // Convert to milliseconds
 
   const config = await getScrapeConfig();
 
@@ -297,8 +319,7 @@ async function openTabsAndScrape_() {
         });
       }
 
-      let delayMs = getRandomizedDelay(delay / 1000); // Convert to seconds and apply jitter
-      await new Promise(r => setTimeout(r, delayMs));
+      await waitForTabComplete(tab.id); // Wait for tab to load
 
       try {
         await chrome.scripting.executeScript({
@@ -348,13 +369,16 @@ async function openTabsAndScrape_() {
     // Close the tab after scraping is complete
     await new Promise((resolve) => {
       chrome.tabs.remove(tab.id, () => {
+        const endTime = Date.now();
         console.log("Tab closed after scraping all properties");
+        console.log(`Total scraping time: ${endTime - startTime} ms`);
         resolve();
       });
     });
   }
-
 }
+
+
 
 async function openTabsAndScrape({ waitIfBusy = false, agent = 'auto' } = {}) {
   const getIsScraping = () =>
@@ -431,7 +455,62 @@ async function getScrapeConfig() {
 
 
 //The scraping script for extracting price from HTML.
-function runScrapingScript(config) {
+async function runScrapingScript(config) {
+
+  // --- Begin stealth background events simulation ---
+  const events = ['focus', 'blur'];
+
+  function fireEvent(eventType) {
+    switch (eventType) {
+      case 'focus': {
+        const x = Math.random() * window.innerWidth;
+        const y = Math.random() * window.innerHeight;
+        const evt = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          screenX: x,
+          screenY: y
+        });
+        document.dispatchEvent(evt);
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: Mouse Move` });
+        // Simulate focus event
+        window.dispatchEvent(new Event('focus', { bubbles: true }));
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: ${eventType}` });
+        break;
+      }
+      case 'blur': {
+        const x = Math.random() * window.innerWidth;
+        const y = Math.random() * window.innerHeight;
+        const evt = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          screenX: x,
+          screenY: y
+        });
+        document.dispatchEvent(evt);
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: Mouse Move` });
+        // Simulate blur event
+        window.dispatchEvent(new Event('blur', { bubbles: true }));
+        chrome.runtime.sendMessage({ action: 'logMessage', msg: `Fired event: ${eventType}` });
+        break;
+      }
+    }
+  }
+
+  // Fire 2 or 3 random stealth events with delays
+  const count = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < count; i++) {
+    const eventType = events[Math.floor(Math.random() * events.length)];
+    fireEvent(eventType);
+    // Wait 0.001 sec to 0.025 sec between events
+    await new Promise(r => setTimeout(r, 10 + Math.random() * 15));
+  }
+  // --- End stealth events simulation ---
+
   var getFirstMatchingElement = function (selectors, filterFn) {
     filterFn = filterFn || function () { return true; };
     for (var i = 0; i < selectors.length; i++) {
@@ -480,6 +559,7 @@ function runScrapingScript(config) {
   chrome.runtime.sendMessage({ action: 'logMessage', msg: `☁️ fetched price for ${hotelName}: ${price}` });
   chrome.runtime.sendMessage({ action: "storePrice", price: price, hotelName: hotelName });
 }
+
 
 function storePrice(hotelName, price) {
   chrome.storage.local.get({ prices: {} }, (result) => {
@@ -975,9 +1055,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'openDashboard':
       chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/dashboard.html') });
       break;
-      case 'getPriceHistory':
-        getPriceHistory(message.hotelName);
-        break;
+    case 'getPriceHistory':
+      getPriceHistory(message.hotelName);
+      break;
     case 'logMessage':
       log("🔧 External log:", message.msg);
       break;

@@ -524,10 +524,17 @@ async function runScrapingScript(config) {
   var price = '';
 
   var soldOutSelectors = config.soldOutSelectors || (config.soldOutSelector ? [config.soldOutSelector] : []);
+
+  var soldOutKeywords = (config.soldOutKeywords || ['sold out']).map(k => k.toLowerCase());
+
   var soldOutElement = getFirstMatchingElement(
     soldOutSelectors,
-    function (el) { return el.textContent.toLowerCase().indexOf('sold out') !== -1; }
+    function (el) {
+      const text = el.textContent.toLowerCase();
+      return soldOutKeywords.some(keyword => text.includes(keyword));
+    }
   );
+
 
   if (soldOutElement) {
     price = 'Sold Out';
@@ -971,10 +978,13 @@ chrome.runtime.onInstalled.addListener(() => {
   scheduleFrequentScrape(); //this will also set the daily sync alarm
   scheduleDailyScrape(); // Default to 11:10 AM
   loginAtStartup(); // Ensure user is logged in at startup
+  chrome.storage.local.set({ isScraping: false, scrapeProgress: { "current": 0, "total": 0 } }); // Reset scraping state on install
   log("🔧 Extension installed. Scheduled daily scrape at 11:10 AM and frequent scrape every 30 minutes.");
+
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  chrome.storage.local.set({ isScraping: false, scrapeProgress: { "current": 0, "total": 0 } }); // Reset scraping state on startup
   loginAtStartup(); // Ensure user is logged in at startup
   chrome.storage.local.get(
     ['frequentScrapeEnabled', 'frequentScrapeInterval', 'dailyScrapeEnabled', 'dailyScrapeTime'],

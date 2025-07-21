@@ -13,6 +13,7 @@ module.exports = (env, argv) => {
             background: './src/background.js',
             'popup/popup': './src/popup/popup.jsx',
             'dashboard/dashboard': './src/dashboard/main.jsx',
+            'content/trackPropertyButton': './src/content/trackPropertyButton.js',
         },
         output: {
             path: path.resolve(__dirname, 'dist'),

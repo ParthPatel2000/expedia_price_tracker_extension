@@ -4,17 +4,33 @@ import "./tailwind.css";
 // PricesView displays the current hotel prices, allows refreshing, and shows scraping progress/status.
 export default function PricesView({ setActiveView, statusMsg, isError, showStatusMsg }) {
     const [prices, setPrices] = useState({});
+    const [lastUpdated, setLastUpdated] = useState(null);
     const [backgroundTabs, setBackgroundTabs] = useState(true);
     const [progress, setProgress] = useState({ current: 0, total: 0 });
     const [isScraping, setIsScraping] = useState(false);
+    const [detectedBot, setDetectedBot] = useState(false);
 
     // Load initial prices and settings
     useEffect(() => {
-        chrome.storage.local.get(["prices", "backgroundTabs", "scrapeProgress", "isScraping"], (result) => {
+        chrome.storage.local.get(["prices", "backgroundTabs", "scrapeProgress", "isScraping", "lastrun", "detectedBot"], (result) => {
             setPrices(result.prices || {});
             setBackgroundTabs(result.backgroundTabs ?? true);
             setProgress(result.scrapeProgress ?? { current: 0, total: 0 });
             setIsScraping(result.isScraping ?? false);
+            setDetectedBot(result.detectedBot ?? false);
+            setLastUpdated(
+                result.lastrun
+                    ? new Date(result.lastrun).toLocaleString("en-US", {
+                        month: "short", // Jul
+                        day: "2-digit", // 21
+                        year: "numeric", // 2025
+                        hour: "2-digit", // 04
+                        minute: "2-digit", // 01\
+                        ampm: "short", // PM
+                        hour12: true,    // 12-hour format
+                    })
+                    : null
+            );
         });
     }, []);
 
@@ -29,6 +45,9 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
             }
             if (area === 'local' && changes.isScraping) {
                 setIsScraping(changes.isScraping.newValue);
+            }
+            if (area === 'local' && changes.lastUpdated) {
+                setLastUpdated(changes.lastUpdated.newValue);
             }
         };
         chrome.storage.onChanged.addListener(listener);
@@ -48,6 +67,12 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
         };
     }, [showStatusMsg]);
 
+    const dismissBotWarning = () => {
+        chrome.storage.local.set({ detectedBot: false }, () => {
+            setDetectedBot(false);
+        });
+    };
+
     // Handle refresh prices button
     const handleRefresh = () => {
         chrome.runtime.sendMessage({ action: "startScraping" });
@@ -58,20 +83,37 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
         if (!prices || Object.keys(prices).length === 0) {
             return (
                 <tr>
-                    <td colSpan="3" className="p-4 text-center text-gray-500">
+                    <td colSpan="2" className="p-4 text-center text-gray-500">
                         No prices found. Run the scraper!
                     </td>
                 </tr>
             );
         }
+
         return Object.entries(prices).map(([hotel, data]) => (
             <tr key={hotel} className="table-row">
                 <td className="table-cell">{hotel}</td>
-                <td className="table-cell">{data.price}</td>
-                <td className="table-cell">{data.timestamp}</td>
+                <td className="table-cell w-28 max-w-[10rem]">
+                    <div className="grid grid-cols-2 gap-2 items-center">
+                        {/* Left column: Price centered vertically */}
+                        <div className="flex items-center justify-start h-full">
+                            <div className="text-lg font-bold">${data.price}</div>
+                        </div>
+
+                        {/* Right column: High on top, Low on bottom */}
+                        <div className="flex flex-col justify-between text-xs text-right text-gray-600 h-full">
+                            {/* <div className="text-red-500">: ${data.todayshigh}</div>
+                            <div className="text-green-500">Low: ${data.todayslow}</div> */}
+                            <div><span className="text-green-500">▲</span> ${data.todayshigh}</div>
+                            <div><span className="text-red-500">▼</span> ${data.todayslow}</div>
+
+                        </div>
+                    </div>
+                </td>
             </tr>
         ));
     };
+
     return (
         <div>
             {/* Dev-only controls */}
@@ -107,13 +149,40 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
                 </button>
             </div>
 
+            {detectedBot && (
+                <div className="alert alert-warning mb-4 p-4 rounded border border-yellow-400 bg-yellow-100 text-yellow-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                        ⚠️ Bot detected! Please complete the CAPTCHA at{" "}
+                        <a
+                            href="https://www.expedia.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline text-blue-600 hover:text-blue-800"
+                        >
+                            Expedia.com
+                        </a>.
+                        the scraper will not work until you do so.
+                    </div>
+                    <button
+                        onClick={dismissBotWarning}
+                        className="btn"
+                        aria-label="Dismiss bot detection warning"
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
+
+            {lastUpdated && (
+                <p className="text-sm text-gray-600 mb-3">Last updated: {lastUpdated}</p>
+            )}
+
             <div className="table-scroll-container">
                 <table className="table">
                     <thead className="table-header sticky top-0 bg-gray-100">
                         <tr>
                             <th className="table-cell">Hotel</th>
                             <th className="table-cell">Price</th>
-                            <th className="table-cell">Updated At</th>
                         </tr>
                     </thead>
                     <tbody>{renderPricesTable()}</tbody>

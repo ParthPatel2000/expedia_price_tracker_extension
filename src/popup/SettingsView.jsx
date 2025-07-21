@@ -6,14 +6,14 @@ export default function SettingsView({
 }) {
 
     const [email, setEmail] = useState("");
-    const [delay, setDelay] = useState(6);
+    const [timeout, setTimeout] = useState(6);
     const [authState, setAuthState] = useState("anonymous");
 
     useEffect(() => {
-        chrome.storage.local.get(["notificationEmail", "authState", "pageDelay"], (result) => {
+        chrome.storage.local.get(["notificationEmail", "authState", "timeout"], (result) => {
             setEmail(result.notificationEmail || "");
             setAuthState(result.authState || "anonymous");
-            setDelay(result.pageDelay ?? 6);
+            setTimeout(result.timeout ?? 30000); // Default to 30 seconds if not set
         });
     }, []);
 
@@ -21,7 +21,7 @@ export default function SettingsView({
         const listener = (changes, area) => {
             if (area === "local") {
                 if (changes.notificationEmail) setEmail(changes.notificationEmail.newValue);
-                if (changes.pageDelay) setDelay(changes.pageDelay.newValue);
+                if (changes.timeout) setTimeout(changes.timeout.newValue);
                 if (changes.authState) setAuthState(changes.authState.newValue);
             }
         };
@@ -85,17 +85,17 @@ export default function SettingsView({
             <div className="space-y-4">
                 {/* Page Delay */}
                 <div className="flex items-center gap-3">
-                    <label className="label">Page Load Delay (sec):</label>
+                    <label className="label">Page Load Timeout (sec):</label>
                     <input
                         type="number"
-                        value={delay}
+                        value={timeout / 1000}
                         min={1}
                         onChange={e => {
                             const d = parseInt(e.target.value);
                             if (!isNaN(d)) {
-                                setDelay(d);
-                                chrome.storage.local.set({ pageDelay: d });
-                                showStatusMsg(`✅ Page delay saved: ${d} sec`);
+                                setTimeout(d);
+                                chrome.storage.local.set({ timeout: d * 1000 });
+                                showStatusMsg(`✅ Page timeout saved: ${d} sec`);
                             }
                         }}
                         className="input w-20"

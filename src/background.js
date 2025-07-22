@@ -250,9 +250,9 @@ function generateUrls() {
   return props.map(p => updateUrlWithDates(p.url, checkIn, checkOut));
 }
 
-  async function openTabsAndScrape_() {
+async function openTabsAndScrape_() {
 
-    function checkForBotDetection(tabId) {
+  function checkForBotDetection(tabId) {
     return chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -264,137 +264,137 @@ function generateUrls() {
   }
 
 
-    // Function to wait for a tab to complete loading or timeout 30 secs
-    function waitForTabComplete(tabId, timeout = 30000) {
-      return new Promise((resolve, reject) => {
-        let timer = setTimeout(() => {
+  // Function to wait for a tab to complete loading or timeout 30 secs
+  function waitForTabComplete(tabId, timeout = 30000) {
+    return new Promise((resolve, reject) => {
+      let timer = setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        reject(new Error("Timeout waiting for tab to load"));
+      }, timeout);
+
+      function listener(updatedTabId, changeInfo) {
+        if (updatedTabId === tabId && changeInfo.status === "complete") {
+          clearTimeout(timer);
           chrome.tabs.onUpdated.removeListener(listener);
-          reject(new Error("Timeout waiting for tab to load"));
-        }, timeout);
-
-        function listener(updatedTabId, changeInfo) {
-          if (updatedTabId === tabId && changeInfo.status === "complete") {
-            clearTimeout(timer);
-            chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
-          }
-        }
-
-        chrome.tabs.onUpdated.addListener(listener);
-      });
-    }
-
-    const startTime = Date.now();
-    let anyError = false;
-    const urls = generateUrls();
-    if (!urls || urls.length === 0) {
-      showStatusMsg("⚠️ No URLs to scrape.", true);
-      return;
-    }
-
-
-    const timeout = await new Promise(resolve =>
-      chrome.storage.local.get({ timeout: 30000 }, res => resolve(res.timeout * 1000))
-    ); // Convert to milliseconds
-
-    const config = await getScrapeConfig();
-
-    // Wrap chrome.storage.local.get in a Promise to await it
-    const result = await new Promise((resolve) => {
-      chrome.storage.local.get({ backgroundTabs: true }, resolve);
-    });
-
-    const openInBackground = result.backgroundTabs;
-
-    // Create tab and wait for it to open
-    const tab = await new Promise((resolve) => {
-      chrome.tabs.create({ url: urls[0], active: !openInBackground }, resolve);
-    });
-
-    try {
-      for (let i = 0; i < urls.length; i++) {
-        chrome.storage.local.set({
-          scrapeProgress: { current: i + 1, total: urls.length },
-          isScraping: true
-        });
-
-        const url = urls[i];
-        if (i > 0) {
-          await new Promise((resolve) => {
-            chrome.tabs.update(tab.id, { url }, resolve);
-          });
-        }
-
-        await waitForTabComplete(tab.id, timeout); // Wait for tab to load
-
-        const isbotDetected = await checkForBotDetection(tab.id);
-        if(isbotDetected) {
-          chrome.runtime.sendMessage({
-            type: "scrape_failed",
-            reason: "bot_detected",
-            url: url
-          });
-          chrome.storage.local.set({'detectedBot': true});
-          anyError = true;
-          return; // Stop further scraping
-        }
-
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: runScrapingScript,
-            args: [config],
-          });
-        }
-        catch (err) {
-          anyError = true;
-          if (err.message.includes("No tab with id")) {
-            showStatusMsg("⚠️ tab closed unexpectedly.", true);
-            error("⚠️ Tab closed unexpectedly while scraping:", err);
-            chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: "⚠️ Tab closed unexpectedly" });
-            break; // Exit loop if tab is closed
-          } else {
-            showStatusMsg("❌ Error executing scraping script: " + err.message, true);
-            error("❌ Error executing scraping script:", err);
-            chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: err.message });
-            continue; // Skip to next URL if script fails
-          }
-        }
-      }
-    } catch (err) {
-      anyError = true;
-      showStatusMsg("❌ Error during scraping: " + err.message, true);
-      error("❌ Error during scraping:", err);
-      chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: err.message });
-    }
-    finally {
-      // Reset scraping state
-      await new Promise((resolve) => {
-        chrome.storage.local.set({
-          scrapeProgress: { current: 0, total: 0 },
-          isScraping: false
-        }, resolve);
-      });
-
-      // Update last run time only if no errors occurred
-      if (!anyError) {
-        await new Promise((resolve) => {
-          chrome.storage.local.set({ lastrun: new Date().toISOString() }, resolve);
-        });
-        log("✅ Scraping completed successfully for all properties.");
-      }
-
-      // Close the tab after scraping is complete
-      await new Promise((resolve) => {
-        chrome.tabs.remove(tab.id, () => {
-          const endTime = Date.now();
-          console.log("Tab closed after scraping all properties");
-          console.log(`Total scraping time: ${endTime - startTime} ms`);
           resolve();
-        });
-      });
-    }
+        }
+      }
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
   }
+
+  const startTime = Date.now();
+  let anyError = false;
+  const urls = generateUrls();
+  if (!urls || urls.length === 0) {
+    showStatusMsg("⚠️ No URLs to scrape.", true);
+    return;
+  }
+
+
+  const timeout = await new Promise(resolve =>
+    chrome.storage.local.get({ timeout: 30000 }, res => resolve(res.timeout * 1000))
+  ); // Convert to milliseconds
+
+  const config = await getScrapeConfig();
+
+  // Wrap chrome.storage.local.get in a Promise to await it
+  const result = await new Promise((resolve) => {
+    chrome.storage.local.get({ backgroundTabs: true }, resolve);
+  });
+
+  const openInBackground = result.backgroundTabs;
+
+  // Create tab and wait for it to open
+  const tab = await new Promise((resolve) => {
+    chrome.tabs.create({ url: urls[0], active: !openInBackground }, resolve);
+  });
+
+  try {
+    for (let i = 0; i < urls.length; i++) {
+      chrome.storage.local.set({
+        scrapeProgress: { current: i + 1, total: urls.length },
+        isScraping: true
+      });
+
+      const url = urls[i];
+      if (i > 0) {
+        await new Promise((resolve) => {
+          chrome.tabs.update(tab.id, { url }, resolve);
+        });
+      }
+
+      await waitForTabComplete(tab.id, timeout); // Wait for tab to load
+
+      const isbotDetected = await checkForBotDetection(tab.id);
+      if (isbotDetected) {
+        chrome.runtime.sendMessage({
+          type: "scrape_failed",
+          reason: "bot_detected",
+          url: url
+        });
+        chrome.storage.local.set({ 'detectedBot': true });
+        anyError = true;
+        return; // Stop further scraping
+      }
+
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: runScrapingScript,
+          args: [config],
+        });
+      }
+      catch (err) {
+        anyError = true;
+        if (err.message.includes("No tab with id")) {
+          showStatusMsg("⚠️ tab closed unexpectedly.", true);
+          error("⚠️ Tab closed unexpectedly while scraping:", err);
+          chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: "⚠️ Tab closed unexpectedly" });
+          break; // Exit loop if tab is closed
+        } else {
+          showStatusMsg("❌ Error executing scraping script: " + err.message, true);
+          error("❌ Error executing scraping script:", err);
+          chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: err.message });
+          continue; // Skip to next URL if script fails
+        }
+      }
+    }
+  } catch (err) {
+    anyError = true;
+    showStatusMsg("❌ Error during scraping: " + err.message, true);
+    error("❌ Error during scraping:", err);
+    chrome.runtime.sendMessage({ action: 'scrapingFailed', msg: err.message });
+  }
+  finally {
+    // Reset scraping state
+    await new Promise((resolve) => {
+      chrome.storage.local.set({
+        scrapeProgress: { current: 0, total: 0 },
+        isScraping: false
+      }, resolve);
+    });
+
+    // Update last run time only if no errors occurred
+    if (!anyError) {
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ lastrun: new Date().toISOString() }, resolve);
+      });
+      log("✅ Scraping completed successfully for all properties.");
+    }
+
+    // Close the tab after scraping is complete
+    await new Promise((resolve) => {
+      chrome.tabs.remove(tab.id, () => {
+        const endTime = Date.now();
+        console.log("Tab closed after scraping all properties");
+        console.log(`Total scraping time: ${endTime - startTime} ms`);
+        resolve();
+      });
+    });
+  }
+}
 
 
 
@@ -702,6 +702,20 @@ const getPriceBuffer = () =>
       resolve(result[STORAGE_KEY] || {});
     });
   });
+
+async function getTodaysPricehistory(hotelName) {
+  const buffer = await getPriceBuffer();
+
+  const todaysHistory = buffer[hotelName] || [];
+  if (todaysHistory.length === 0) {
+    chrome.runtime.sendMessage({ action: "noPriceHistory", hotelName, history: null });
+    log(`⚠️ (getTodaysPricehistory): No price history found for ${hotelName}`);
+  } else {
+    chrome.runtime.sendMessage({ action: "priceHistoryFetched", hotelName, history: todaysHistory });
+    log(`✅ (getTodaysPricehistory): Fetched price history for ${hotelName}:`, todaysHistory);
+  }
+  return todaysHistory;
+}
 
 //-----------------------------------------End of Scraping logic--------------------------------------------------*/
 
@@ -1149,6 +1163,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     case 'getPriceHistory':
       getPriceHistory(message.hotelName);
+      break;
+    case 'getTodaysPriceHistory':
+      getTodaysPriceHistory(message.hotelName);
       break;
     case 'logMessage':
       log("🔧 External log:", message.msg);

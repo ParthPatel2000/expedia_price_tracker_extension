@@ -46,21 +46,35 @@ export default function PropertiesView({ onBack, statusMsg, isError, showStatusM
     const handleAddLink = () => {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             const url = tabs[0].url;
+
+            // Must match the exact Expedia hotel search URL structure
             if (!url.includes("expedia.com/Hotel-Search")) {
                 showStatusMsg("❌ Not an Expedia Hotel Search URL", true);
                 return;
             }
-            const hotelName = new URL(url).searchParams.get("hotelName");
-            const displayName = hotelName ? decodeURIComponent(hotelName.replace(/\+/g, " ")) : "Unnamed Hotel";
+
+            const urlObj = new URL(url);
+            const hotelName = urlObj.searchParams.get("hotelName");
+            const selected = urlObj.searchParams.get("selected");
+
+            // Enforce that both hotelName and selected ID must be present
+            if (!hotelName || !selected) {
+                showStatusMsg("⚠️ This is not a specific hotel property URL. Search specifically for a hotel in \"search by property name\".", true);
+                return;
+            }
+
+            const displayName = decodeURIComponent(hotelName.replace(/\+/g, " ")).trim();
 
             chrome.storage.local.get({ propertyLinks: [] }, (result) => {
                 const existing = result.propertyLinks || [];
                 if (existing.some(p => p.name === displayName)) {
-                    showStatusMsg(`⚠️ Property \"${displayName}\" already tracked.`, true);
+                    showStatusMsg(`⚠️ Property "${displayName}" already tracked.`, true);
                     return;
                 }
+
                 const updated = [...existing, { name: displayName, url }];
                 updated.sort((a, b) => a.name.localeCompare(b.name));
+
                 chrome.storage.local.set({ propertyLinks: updated }, () => {
                     chrome.runtime.sendMessage({ action: "syncPropertyLinks" });
                     showStatusMsg(`✅ Saved: ${displayName}`);

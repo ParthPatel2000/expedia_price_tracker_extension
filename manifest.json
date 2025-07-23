@@ -2,7 +2,13 @@
   "manifest_version": 3,
   "name": "Expedia Price Scraper",
   "version": "4.0.0",
-  "permissions": ["identity", "tabs", "scripting", "storage", "alarms"],
+  "permissions": [
+    "identity",
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
   "host_permissions": [
     "https://www.expedia.com/*",
     "https://raw.githubusercontent.com/*"
@@ -19,7 +25,9 @@
         "dashboard/dashboard.html",
         "dashboard/*"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "icons": {
@@ -29,4 +37,3 @@
   },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3o46Tj3EyRWGCBCR6bf/UhZ+NcXjNN53UiFY6yNLcp0WkO6/IXMrLeuiSoxUZ7asv3rb/wkqMI957KN9h6+SnHRbI/YGz2mXeL5SdSRBxi8MJimcRv0oOCuwbkIHOM2f/n+C8BIp20amGQliIx54DAhYhA17V3LvlidXgw/vlNdhT+gvzr1FwBfmM1eCfuy2LlOlopzZluUmVw5muKK1ds4OgNFn0EsLdhl7xel1JN/RiTdJyrdHKff5TAMufY47IDUJo0wh+Egwf7zSYRkDRsWKIiBk4VsWCCmHhbMTtREYhGlRfRDPbTrNIXfFvvR57RdDRnZi2ChoLZabEIvCQwIDAQAB"
 }
-

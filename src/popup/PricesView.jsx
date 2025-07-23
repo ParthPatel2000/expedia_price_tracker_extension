@@ -12,20 +12,20 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
 
     // Load initial prices and settings
     useEffect(() => {
-        chrome.storage.local.get(["prices", "backgroundTabs", "scrapeProgress", "isScraping", "lastrun", "detectedBot"], (result) => {
+        chrome.storage.local.get(["prices", "backgroundTabs", "scrapeProgress", "isScraping", "lastRun", "detectedBot"], (result) => {
             setPrices(result.prices || {});
             setBackgroundTabs(result.backgroundTabs ?? true);
             setProgress(result.scrapeProgress ?? { current: 0, total: 0 });
             setIsScraping(result.isScraping ?? false);
             setDetectedBot(result.detectedBot ?? false);
             setLastUpdated(
-                result.lastrun
-                    ? new Date(result.lastrun).toLocaleString("en-US", {
+                result.lastRun
+                    ? new Date(result.lastRun).toLocaleString("en-US", {
                         month: "short", // Jul
                         day: "2-digit", // 21
                         year: "numeric", // 2025
                         hour: "2-digit", // 04
-                        minute: "2-digit", // 01\
+                        minute: "2-digit", // 01
                         ampm: "short", // PM
                         hour12: true,    // 12-hour format
                     })
@@ -48,6 +48,9 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
             }
             if (area === 'local' && changes.lastUpdated) {
                 setLastUpdated(changes.lastUpdated.newValue);
+            }
+            if (area === 'local' && changes.detectedBot) {
+                setDetectedBot(changes.detectedBot.newValue);
             }
         };
         chrome.storage.onChanged.addListener(listener);
@@ -130,24 +133,33 @@ export default function PricesView({ setActiveView, statusMsg, isError, showStat
                     >
                         🧹 Clear Prices
                     </button>
-                    {/* Open Dashboard Button */}
-                    <button
-                        onClick={() => {
-                            chrome.runtime.sendMessage({ action: "openDashboard" });
-                        }}
-                        className="btn"
-                    >
-                        🧾 Open Dashboard
-                    </button>
+
                 </div>
             )}
 
             <div className="flex justify-between items-center mb-3">
                 <h3 className="heading-lg">Hotel Prices</h3>
-                <button onClick={() => setActiveView("settings")} className="btn">
-                    ⚙️ Settings
-                </button>
+
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => {
+                            chrome.runtime.sendMessage({ action: "openDashboard" });
+                        }}
+                        className="btn bg-blue-100 text-blue-700 hover:bg-blue-200"
+                        title="Open Price History Dashboard"
+                    >
+                        📈
+                    </button>
+
+                    <button
+                        onClick={() => setActiveView("settings")}
+                        className="btn"
+                    >
+                        ⚙️ Settings
+                    </button>
+                </div>
             </div>
+
 
             {detectedBot && (
                 <div className="alert alert-warning mb-4 p-4 rounded border border-yellow-400 bg-yellow-100 text-yellow-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

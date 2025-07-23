@@ -19,17 +19,6 @@
   "action": {
     "default_popup": "popup/popup.html"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://www.expedia.com/Hotel-Search*"
-      ],
-      "js": [
-        "content/trackPropertyButton.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
   "options_page": "dashboard/dashboard.html",
   "web_accessible_resources": [
     {

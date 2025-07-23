@@ -15,6 +15,8 @@ export default function Dashboard() {
     const [selectedProperty, setSelectedProperty] = useState(null);
     const [logs, setLogs] = useState([]);
     const [priceHistories, setPriceHistories] = useState({});
+    const [isDev, setIsDev] = useState(false);
+    const [lastRun, setLastRun] = useState(null);
     const STORE_NAME = "todaysPriceHistoryBuffer";
 
     const log = (...args) => {
@@ -27,11 +29,13 @@ export default function Dashboard() {
 
     useEffect(() => {
         chrome.runtime.sendMessage({ action: "logMessage", msg: "🔧 Dashboard loaded" });
-        chrome.storage.local.get(["propertyLinks", STORE_NAME], (result) => {
+        chrome.storage.local.get(["propertyLinks", STORE_NAME, "lastRun"], (result) => {
             setProperties(result.propertyLinks || []);
             setPriceHistories(result[STORE_NAME] || {});
+            setLastRun(result.lastRun || null);
             log(`📄 Loaded ${result.propertyLinks?.length || 0} properties`);
         });
+        setIsDev(process.env.NODE_ENV === "development");
     }, []);
 
     useEffect(() => {
@@ -67,7 +71,8 @@ export default function Dashboard() {
             const timestamp = new Date(entry?.timestamp);
             const price = Number(entry?.price);
             return {
-                time: timestamp.toISOString().slice(11, 16), // "HH:mm"
+                // time: timestamp.toISOString().slice(11, 16), // "HH:mm"
+                time: timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }),
                 price: isNaN(price) ? 0 : price,
             };
         });
@@ -78,7 +83,7 @@ export default function Dashboard() {
 
     return (
         <div className="p-4 font-sans text-sm text-gray-800 max-w-3xl mx-auto">
-            <h1 className="text-xl font-bold mb-4">Dashboard</h1>
+            <h1 className="text-xl font-bold mb-4">Price History</h1>
 
             <label htmlFor="property-select" className="block mb-2 font-semibold">
                 Select a property:
@@ -102,7 +107,8 @@ export default function Dashboard() {
             {selectedProperty && (
                 <div className="mb-6">
                     <h2 className="font-semibold mb-2">
-                        Price History for {selectedProperty}
+                        last updated:{" "}
+                        {lastRun ? new Date(lastRun).toLocaleString() : "N/A"}
                     </h2>
 
                     {chartData.length === 0 ? (
@@ -127,7 +133,7 @@ export default function Dashboard() {
                 </div>
             )}
 
-            <div className="bg-gray-100 p-3 rounded shadow-inner max-h-64 overflow-auto text-xs">
+            {isDev && (<div className="bg-gray-100 p-3 rounded shadow-inner max-h-64 overflow-auto text-xs">
                 <h2 className="font-semibold mb-1">📋 Status Logs</h2>
                 <ul className="space-y-1">
                     {logs.length === 0 ? (
@@ -140,7 +146,7 @@ export default function Dashboard() {
                         ))
                     )}
                 </ul>
-            </div>
+            </div>)}
         </div>
     );
 }

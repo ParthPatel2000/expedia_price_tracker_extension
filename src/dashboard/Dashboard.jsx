@@ -115,9 +115,9 @@ export default function Dashboard() {
                         <p className="text-gray-500">No valid price data available to plot.</p>
                     ) : (
                         <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={chartData}>
+                            <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 40, left: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="time" />
+                                <XAxis dataKey="time" interval={0} tick={{ fontSize: 11, angle: -45, textAnchor: 'end' }} />
                                 <YAxis />
                                 <Tooltip />
                                 <Line

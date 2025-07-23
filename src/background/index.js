@@ -1,11 +1,8 @@
 //background.js
-import { getPriceHistoryIDB, savePriceHistoryIDB } from '../lib/priceHistoryDB.js';
 import { openTabsAndScrape } from './scraper.js';
-import { consolidatePriceBuffer } from './monthlyHistory.js';
 import { syncPropertyLinksToFirestore, downloadPropertyLinksFromFirestore } from './propertyLinks.js';
 import { loginAtStartup, launchGoogleOAuth, LogoutUser } from './firebase_utils.js';
 import { storePrice, getTodaysPriceHistory } from './priceStorage.js';
-import { getPriceHistory } from './monthlyHistory.js';
 import {
   scheduleFrequentScrape, cancelFrequentScrape,
   scheduleDailyScrape, cancelDailyScrape,
@@ -13,6 +10,8 @@ import {
 } from './alarmScheduling.js';
 import { sendEmailRequest } from './emailNotification.js';
 
+
+// import { consolidatePriceBuffer, getPriceHistory } from './monthlyHistory.js';
 
 //<--------------------------------------Logger------------------------------------------------------>
 // dev mode logging
@@ -143,9 +142,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'openDashboard':
       chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/dashboard.html') });
       break;
-    case 'getPriceHistory':
-      getPriceHistory(message.hotelName);
-      break;
+    // case 'getPriceHistory':
+    //   getPriceHistory(message.hotelName);
+    //   break;
     case 'getTodaysPriceHistory':
       getTodaysPriceHistory(message.hotelName);
       break;

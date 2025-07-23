@@ -1,5 +1,5 @@
 import { log, error, showStatusMsg } from './index.js';
-import { savePriceHistoryIDB } from '../lib/priceHistoryDB.js';
+import { savePriceHistoryIDB, getPriceHistoryIDB } from '../lib/priceHistoryDB.js';
 import { getPriceBuffer } from './priceStorage.js';
 import { auth, db } from './firebase_utils.js';
 import { doc, setDoc, getDoc } from 'firebase/firestore';

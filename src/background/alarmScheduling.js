@@ -1,6 +1,6 @@
 import { log, error, showStatusMsg } from './index.js';
 import { openTabsAndScrape } from './scraper.js';
-import { consolidatePriceBuffer } from './monthlyHistory.js';
+// import { consolidatePriceBuffer } from './monthlyHistory.js';
 import { sendEmailRequest } from './emailNotification.js';
 
 
@@ -229,7 +229,8 @@ export async function handleFrequentScrape() {
 
 export async function handleDailySync() {
   try {
-    await consolidatePriceBuffer(); // Consolidate prices and push to Firebase for price history
+    // await consolidatePriceBuffer(); // Consolidate prices and push to Firebase for price history
+    console.log("🔄 Daily sync disabled by dev");
     log("✅ Daily sync completed successfully.");
   } catch (err) {
     error("❌ Error during daily sync:", err);

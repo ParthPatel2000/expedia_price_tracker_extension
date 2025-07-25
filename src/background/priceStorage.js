@@ -147,6 +147,14 @@ async function addPriceSnapshot(hotelName, price = null, high = null, low = null
     });
 }
 
+
+
+/**
+ * Retrieves the price buffer object from Chrome's local storage.
+ *
+ * @returns {Promise<Object>} A promise that resolves to the price buffer object stored under STORAGE_KEY,
+ * or an empty object if nothing is stored.
+ */
 export const getPriceBuffer = () =>
     new Promise(resolve => {
         chrome.storage.local.get([STORAGE_KEY], result => {

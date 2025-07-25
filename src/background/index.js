@@ -189,9 +189,9 @@ if (isDev) {
 
 
     if (message.action === 'getSummaryPrices') {
-      import('./monthlyHistory.js').then(({ getPriceHistory }) => {
-        getPriceHistory(message.hotelName);
-      });
+      // import('./monthlyHistory.js').then(({ getPriceHistory }) => {
+      //   getPriceHistory(message.hotelName);
+      // });
       import('./monthlyHistory.js').then(({ consolidatePriceBuffer }) => {
         consolidatePriceBuffer();
       });

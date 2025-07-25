@@ -5,51 +5,54 @@ import { auth, db } from './firebase_utils.js';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 // Function to group prices by day
 
+
 /**
- * Summarizes the latest hotel prices from a buffer object.
+ * Summarizes the latest price information for each hotel in the provided buffer.
  *
- * For each hotel, computes the opening price, closing price, price range,
- * average price, and includes metadata such as timestamp, currency, and source.
- * Ignores invalid price entries and defaults to 0 if none are valid.
+ * For each hotel, calculates the high, low, and average prices from the available price snapshots.
+ * If no valid prices are found, defaults to 0 and logs a warning. Also extracts the timestamp and currency
+ * from the first price snapshot entry.
  *
- * @param {Object} buffer - An object where each key is a hotel name and the
- *   value is an array of price entry objects. Each entry should have a
- *   `price`, `timestamp`, `currency`, and `source` field.
- * @returns {Object} An object mapping hotel names to their summarized price
- *   data, including openingPrice, closingPrice, priceRange, average, currency,
- *   source, and timestamp.
- *
- * @dependency Relies on a global `log` function for warning messages.
+ * @param {Object} buffer - An object where each key is a hotel name and the value is an object containing:
+ *   - {Array<Object>} priceSnapshots: Array of price snapshot objects, each with at least a `price`, `timestamp`, and `currency`.
+ *   - {number} [high]: Optional precomputed high price.
+ *   - {number} [low]: Optional precomputed low price.
+ * @returns {Object} summary - An object mapping each hotel name to a summary object:
+ *   - {string|null} timestamp: The date (YYYY-MM-DD) of the first price snapshot, or null if unavailable.
+ *   - {number} high: The highest price found or provided.
+ *   - {number} low: The lowest price found or provided.
+ *   - {number} average: The average price, rounded to two decimal places.
+ *   - {string} currency: The currency code, defaults to 'USD' if not provided.
  */
 function summarizeLatestPrices(buffer) {
   const summary = {};
 
   for (const hotel in buffer) {
-    const entries = buffer[hotel];
+    const entries = buffer[hotel].priceSnapshots || [];
     if (!entries.length) continue;
 
-    // Extract numeric prices, ignoring null ones
-    const prices = entries.filter(p => p !== null && !isNaN(p));
+    // Extract numeric prices, ignoring null or invalid ones
+    const prices = entries
+      .filter((p) => p.price != null && !isNaN(p.price))
+      .map((p) => Number(p.price));
 
     if (prices.length === 0) {
-      prices.push(0); // If no valid prices, default to 0
-      log(`⚠️ No valid prices found for ${hotel}. Defaulting to 0.`);
+      prices.push(0); // Default to 0 if no valid prices
+      console.warn(`⚠️ No valid prices found for ${hotel}. Defaulting to 0.`);
     }
 
-    const closingPrice = prices[prices.length - 1];
-    const priceRange = [Math.min(...prices), Math.max(...prices)];
-    const average = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const high = buffer[hotel].high !== undefined ? buffer[hotel].high : Math.max(...prices);
+    const low = buffer[hotel].low !== undefined ? buffer[hotel].low : Math.min(...prices);
+    const average = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
 
-    // Use the date portion of the earliest entry timestamp for consistency
-    const dateKey = entries[0].timestamp.split('T')[0];
+    // Defensive checks for timestamp, currency, and source
+    const firstEntry = entries[0] || {};
 
     summary[hotel] = {
-      timestamp: dateKey,
-      closingPrice,
-      priceRange,
+      high: high,
+      low: low,
       average: Number(average.toFixed(2)),
-      currency: entries[0].currency || 'USD',
-      source: entries[entries.length - 1].source || 'auto'
+      currency: firstEntry.currency || 'USD',
     };
   }
 
@@ -85,8 +88,8 @@ async function pushSummaryToFirebase(summary) {
   for (const hotel in summary) {
     const sanitizedHotel = nameSanitizer(hotel);
 
-    // ✅ Document path: users/<uid>/priceHistory/<sanitizedHotel>
-    const docRef = doc(db, "users", user.uid, "priceHistory", sanitizedHotel);
+    // ✅ Document path: priceHistory/<sanitizedHotel>
+    const docRef = doc(db, "priceHistory", sanitizedHotel);
 
     // ✅ summary[hotel] — NOT [Hotel] (capital H was causing undefined)
     const hotelSummary = summary[hotel];
@@ -124,7 +127,7 @@ export async function consolidatePriceBuffer() {
   const summary = summarizeLatestPrices(buffer);
   await pushSummaryToFirebase(summary);
   log("the summary of latest prices:", summary);
-  log("✅ Consolidated to Firebase and cleared local buffer.");
+  log("✅ Consolidated to Firebase..");
 }
 
 /**

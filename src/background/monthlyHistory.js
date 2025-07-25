@@ -28,17 +28,14 @@ function summarizeLatestPrices(buffer) {
     const entries = buffer[hotel];
     if (!entries.length) continue;
 
-    // Extract numeric prices, ignoring invalid ones
-    const prices = entries
-      .map(e => parseFloat(String(e.price).replace(/[^0-9.]/g, '')))
-      .filter(p => !isNaN(p));
+    // Extract numeric prices, ignoring null ones
+    const prices = entries.filter(p => p !== null && !isNaN(p));
 
     if (prices.length === 0) {
       prices.push(0); // If no valid prices, default to 0
       log(`⚠️ No valid prices found for ${hotel}. Defaulting to 0.`);
     }
 
-    const openingPrice = prices[0];
     const closingPrice = prices[prices.length - 1];
     const priceRange = [Math.min(...prices), Math.max(...prices)];
     const average = prices.reduce((a, b) => a + b, 0) / prices.length;
@@ -48,7 +45,6 @@ function summarizeLatestPrices(buffer) {
 
     summary[hotel] = {
       timestamp: dateKey,
-      openingPrice,
       closingPrice,
       priceRange,
       average: Number(average.toFixed(2)),
@@ -107,11 +103,6 @@ async function pushSummaryToFirebase(summary) {
   }
 }
 
-
-function clearPriceBuffer() {
-  return chrome.storage.local.remove(STORAGE_KEY);
-}
-
 /**
  * Consolidates the local price buffer by summarizing the latest prices and
  * pushing the summary to Firebase. In production mode, clears the local buffer
@@ -125,15 +116,13 @@ function clearPriceBuffer() {
  * - getPriceBuffer: Retrieves the current local price buffer.
  * - summarizeLatestPrices: Summarizes the latest prices from the buffer.
  * - pushSummaryToFirebase: Uploads the summary to Firebase.
- * - clearPriceBuffer: Clears the local price buffer.
  * - log: Logs messages for debugging and status updates.
  * - isDev: Determines if the environment is development or production.
  */
 export async function consolidatePriceBuffer() {
-  const buffer = await getPriceBuffer();
+  const buffer = await getPriceBuffer();  // price buffer from local storage
   const summary = summarizeLatestPrices(buffer);
   await pushSummaryToFirebase(summary);
-  if (!isDev) await clearPriceBuffer(); // Don't clear buffer in dev mode for testing
   log("the summary of latest prices:", summary);
   log("✅ Consolidated to Firebase and cleared local buffer.");
 }

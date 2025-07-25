@@ -73,8 +73,8 @@ export async function storePrice(hotelName, price) {
                 prices[hotelName].todayshigh ?? numericPrice,
                 numericPrice
             );
-            prices[hotelName].price = price; // latest price
         }
+        prices[hotelName].price = price; // doesnt matter if price is valid or not, we show it anyway
 
 
         chrome.storage.local.set({ prices }, () => {
@@ -82,9 +82,14 @@ export async function storePrice(hotelName, price) {
         });
         const agent = await chrome.storage.local.get('agent').then(res => res.agent || 'auto');
         // Add a price snapshot for the hotel
-        addPriceSnapshot(hotelName, isValidPrice ? numericPrice : null, 'USD', agent, isNewDay).catch(err => {
-            error("❌ Error adding price snapshot:", err);
-        });
+        addPriceSnapshot(
+            hotelName, isValidPrice ? numericPrice : null,
+            prices[hotelName].todayshigh || null, // Today's high price
+            prices[hotelName].todayslow || null,  // Today's low price
+            'USD', agent, isNewDay)
+            .catch(err => {
+                error("❌ Error adding price snapshot:", err);
+            });
     });
 }
 
@@ -114,20 +119,23 @@ export async function storePrice(hotelName, price) {
  * @param {string} [source='auto'] - The source of the price data.
  * @returns {Promise<void>}
  */
-async function addPriceSnapshot(hotelName, price, currency = 'USD', source = 'auto', reset = false) {
+async function addPriceSnapshot(hotelName, price = null, high = null, low = null, currency = 'USD', source = 'auto', reset = false) {
     const data = await chrome.storage.local.get(STORAGE_KEY);
     const priceHistory = data[STORAGE_KEY] || {};
 
-    if (!priceHistory[hotelName]) {
-        priceHistory[hotelName] = [];
+    // Initialize the hotel entry if it doesn't exist
+    // If reset is true, we clear the existing history for the hotel
+    if (!priceHistory[hotelName] || reset) {
+        priceHistory[hotelName] = { high: null, low: null, priceSnapshots: [] };
     }
 
-    // If reset is true, clear the existing history for this hotel
-    // This allows for fresh snapshots without old data cluttering
-    if (reset) {
-        priceHistory[hotelName] = [];
-    }
-    priceHistory[hotelName].push({
+    // Update today's high and low prices if provided, they are sent after updating the daily
+    // high and low prices, so no need to check if they are valid.
+    priceHistory[hotelName].high = high;
+    priceHistory[hotelName].low = low;
+
+    // Add the new price snapshot
+    priceHistory[hotelName].priceSnapshots.push({
         price,
         currency,
         source,
@@ -174,7 +182,7 @@ export async function getTodaysPriceHistory(hotelName) {
     const buffer = await getPriceBuffer();
 
     const todaysHistory = buffer[hotelName] || [];
-    if (todaysHistory.length === 0) {
+    if (todaysHistory.priceSnapshots.length === 0) {
         chrome.runtime.sendMessage({ action: "noPriceHistory", hotelName, history: null });
         log(`⚠️ (getTodaysPricehistory): No price history found for ${hotelName}`);
     } else {

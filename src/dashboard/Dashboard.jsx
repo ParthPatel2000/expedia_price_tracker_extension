@@ -8,6 +8,7 @@ import {
     YAxis,
     Tooltip,
     CartesianGrid,
+    Legend,
 } from "recharts";
 
 export default function Dashboard() {
@@ -65,21 +66,51 @@ export default function Dashboard() {
 
     const getChartData = () => {
         const history = priceHistories[selectedProperty];
-        if (!history || !Array.isArray(history)) return [];
+        if (!history || !Array.isArray(history.priceSnapshots)) return [];
 
-        return history.map((entry) => {
+        history.priceSnapshots = history.priceSnapshots.map((entry) => {
             const timestamp = new Date(entry?.timestamp);
             const price = Number(entry?.price);
+            const high = history.high ? Number(history.high) : null;
+            const low = history.low ? Number(history.low) : null;
             return {
                 // time: timestamp.toISOString().slice(11, 16), // "HH:mm"
                 time: timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }),
                 price: isNaN(price) ? 0 : price,
+                high,
+                low,
             };
         });
+
+        return history;
+    };
+
+    const chartData = getChartData();
+
+    const CustomLegend = ({ payload, todayshigh, todayslow }) => {
+        return (
+            <div style={{
+                background: 'rgba(255, 255, 255, 0.85)',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                padding: '6px 10px',
+                fontSize: 12,
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                pointerEvents: 'none',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                color: '#333',
+                zIndex: 1000,
+                userSelect: 'none',
+            }}>
+                <div><strong>Today's High:</strong> {todayshigh ?? 'N/A'}</div>
+                <div><strong>Today's Low:</strong> {todayslow ?? 'N/A'}</div>
+            </div>
+        );
     };
 
 
-    const chartData = getChartData();
 
     return (
         <div className="p-4 font-sans text-sm text-gray-800 max-w-3xl mx-auto">
@@ -106,16 +137,24 @@ export default function Dashboard() {
 
             {selectedProperty && (
                 <div className="mb-6">
-                    <h2 className="font-semibold mb-2">
-                        last updated:{" "}
-                        {lastRun ? new Date(lastRun).toLocaleString() : "N/A"}
-                    </h2>
+                    <div className="mb-6 flex justify-between items-center">
+                        <h2 className="font-semibold">
+                            last updated: {lastRun ? new Date(lastRun).toLocaleString() : "N/A"}
+                        </h2>
 
-                    {chartData.length === 0 ? (
+                        <div className="text-sm text-gray-600">
+                            High: ${chartData.priceSnapshots.length > 0 ? Math.max(...chartData.priceSnapshots.map(p => p.price)) : "N/A"} &nbsp;&nbsp;|&nbsp;&nbsp;
+                            Low: ${chartData.priceSnapshots.length > 0 ? Math.min(...chartData.priceSnapshots.map(p => p.price)) : "N/A"}
+                        </div>
+                    </div>
+
+
+                    {chartData.priceSnapshots.length === 0 ? (
                         <p className="text-gray-500">No valid price data available to plot.</p>
                     ) : (
                         <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 40, left: 0 }}>
+
+                            <LineChart data={chartData.priceSnapshots} margin={{ top: 5, right: 20, bottom: 40, left: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="time" interval={0} tick={{ fontSize: 11, angle: -45, textAnchor: 'end' }} />
                                 <YAxis />
@@ -123,6 +162,7 @@ export default function Dashboard() {
                                 <Line
                                     type="monotone"
                                     dataKey="price"
+
                                     stroke="#3b82f6"
                                     strokeWidth={2}
                                     dot={false}
@@ -132,6 +172,9 @@ export default function Dashboard() {
                     )}
                 </div>
             )}
+
+
+
 
             {isDev && (<div className="bg-gray-100 p-3 rounded shadow-inner max-h-64 overflow-auto text-xs">
                 <h2 className="font-semibold mb-1">📋 Status Logs</h2>

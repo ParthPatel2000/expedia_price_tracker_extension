@@ -1,7 +1,8 @@
-import { log, error, showStatusMsg } from './index.js';
+import { log, error, showStatusMsg, isDev } from './index.js';
 import { openTabsAndScrape } from './scraper.js';
 // import { consolidatePriceBuffer } from './monthlyHistory.js';
 import { sendEmailRequest } from './emailNotification.js';
+import { consolidatePriceBuffer } from './monthlyHistory.js';
 
 
 
@@ -115,6 +116,15 @@ export function scheduleFrequentScrape(intervalInMinutes = 30) {
     });
     showStatusMsg(`✅ Scheduled frequent scrape every ${intervalInMinutes} minutes.`);
     scheduleDailySync(); // Ensure daily sync is scheduled
+    // if (isDev) {
+    //   const hour = new Date().getHours();
+    //   const minute = new Date().getMinutes() + 1; // Schedule for next minute
+    //   scheduleDailySync(hour, minute);
+    //   log(`🔧 Scheduled daily sync at ${hour}:${minute}`);
+    // }
+    // else {
+    //   scheduleDailySync(); // Default to 11:30 PM
+    // }
   });
 }
 
@@ -229,8 +239,15 @@ export async function handleFrequentScrape() {
 
 export async function handleDailySync() {
   try {
-    // await consolidatePriceBuffer(); // Consolidate prices and push to Firebase for price history
-    console.log("🔄 Daily sync disabled by dev");
+    if (isDev) {
+      import('./monthlyHistory.js').then(({ consolidatePriceBuffer }) => {
+        consolidatePriceBuffer();
+      });
+    }
+    else {
+      // consolidatePriceBuffer();  //uncomment this line to enable daily sync in production
+      console.log("🔄 Daily sync disabled by dev");
+    }
     log("✅ Daily sync completed successfully.");
   } catch (err) {
     error("❌ Error during daily sync:", err);

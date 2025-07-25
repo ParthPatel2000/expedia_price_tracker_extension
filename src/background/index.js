@@ -11,7 +11,7 @@ import {
 import { sendEmailRequest } from './emailNotification.js';
 
 
-// import { consolidatePriceBuffer, getPriceHistory } from './monthlyHistory.js';
+// import { getPriceHistory } from './monthlyHistory.js';
 
 //<--------------------------------------Logger------------------------------------------------------>
 // dev mode logging
@@ -142,9 +142,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'openDashboard':
       chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/dashboard.html') });
       break;
-    // case 'getPriceHistory':
-    //   getPriceHistory(message.hotelName);
-    //   break;
+    case 'getPriceHistory':
+      // getPriceHistory(message.hotelName);
+      if (isDev) {
+        import('./monthlyHistory.js').then(({ getPriceHistory }) => {
+          getPriceHistory(message.hotelName);
+        });
+      }
+      else {
+        log("🔧 Monthly history is disabled in production mode.");
+      }
+      break;
     case 'getTodaysPriceHistory':
       getTodaysPriceHistory(message.hotelName);
       break;
@@ -178,9 +186,15 @@ if (isDev) {
       showStatusMsg("✅ Test email sent successfully.", false);
     }
 
+
+
     if (message.action === 'getSummaryPrices') {
-      log("🔧 Fetched price history:", priceHistory);
-      consolidatePriceBuffer();
+      import('./monthlyHistory.js').then(({ getPriceHistory }) => {
+        getPriceHistory(message.hotelName);
+      });
+      import('./monthlyHistory.js').then(({ consolidatePriceBuffer }) => {
+        consolidatePriceBuffer();
+      });
       showStatusMsg("✅ Test price summary consolidated.", false);
     }
 

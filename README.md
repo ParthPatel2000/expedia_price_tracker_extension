@@ -93,4 +93,4 @@ Hi! I'm Parth, and this is my solo-developed Chrome extension, **Expedia Price T
 
 ## Contact
 
-Feel free to reach out via [LinkedIn](https://www.linkedin.com/in/parth472k/) or check out my other projects on [GitHub](https://github.com/ParthPatel2000).
+Feel free to reach out via  or check out my other projects on [GitHub](https://github.com/ParthPatel2000).
